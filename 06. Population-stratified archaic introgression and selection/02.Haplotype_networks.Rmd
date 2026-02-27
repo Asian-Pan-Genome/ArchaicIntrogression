@@ -5,8 +5,9 @@ date: "`r Sys.Date()`"
 output: 
   html_document: # html_notebook, html_document
     toc: true
-    toc_float:
+    toc_float: true
       toc_collapsed: true
+      smooth_scroll: true    # 是否平滑滚动
     toc_depth: 3
     number_sections: true
     theme: simplex # default, united, cerulean, journal, flatly, darkly, readable, spacelab, united, cosmo, lumen, paper, sandstone, simplex, and yeti
