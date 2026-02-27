@@ -1,0 +1,461 @@
+library(rtracklayer)
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+
+archaics <-c("Denisovan","Neanderthal")  
+archaic <- archaics[2]
+archaic <- archaics[1]
+# target_genes <- c("PRDM16")
+# target_genes <- c("PRKCH")
+target_genes <- c("CSGALNACT2")
+target_genes <- c("CH25H")
+
+
+
+if(archaic == "Neanderthal"){
+  introSize <- 0.01
+  df_introgressionSite0 <- read_tsv("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/007_vepAnnotation/004/selected.gene.introAnno.txt") %>% 
+    mutate(AF_ai = (nAFR_geno2 + nnonAFR_geno2)*2/ (n_AFR +n_nonAFR)) 
+}else{
+  introSize <- 0.1
+  df_introgressionSite0 <- read_tsv("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/007_vepAnnotation/003/CSGALNACT2_CH25H.txt") %>% 
+    mutate(AF_ai = (nAFR_geno2 + nnonAFR_geno2)*2/ (n_AFR +n_nonAFR)) 
+}
+  
+  
+df_cre <- read_tsv("/Users/Aoyue/project_pos/human_ILS/001_data/008_encode/GRCh38-cCREs.bed.gz",col_names = F) %>% 
+  dplyr::rename(Chr = X1, Start = X2, End = X3, Motif = X6)
+
+df_hmGeneENSG <- read_csv("/Users/Aoyue/project_pos/human_ILS/002_dataAnalysis/002_geneAnnotation/014_ortholog/003_fromEnsembl_source/gProfiler_hsapiens.csv") %>% select(GeneID = converted_alias,GeneName = name) %>% 
+  distinct(GeneID,.keep_all = T) %>% 
+  filter(GeneID != "None")
+
+### file size is bigger, run only once
+## df_eqtl <- read_tsv("/Users/Aoyue/project_pos/APG_archaicDNA/001_data/005_annotation/Whole_Blood.v10.eQTLs.signif_pairs.tsv.gz")
+
+# df_eqtl2 <- df_eqtl %>% 
+#   mutate(Chr = str_split_fixed(variant_id,"_",5)[,1]) %>% 
+#   mutate(Pos =as.numeric(str_split_fixed(variant_id,"_",5)[,2])) %>% 
+#   mutate(GeneID = str_split_fixed(gene_id,"\\.",2)[,1]) %>% 
+#   left_join(df_hmGeneENSG,by=c("GeneID")) %>% 
+#   relocate(Chr,Pos,GeneName)
+
+###============================================================================= parameter
+dfpop <- read_tsv("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/007_ASMai/000_popInfo/003_PopInfo_APG_addArchaic.txt") %>% select(Assembly_ID, Pop, Anc)
+
+
+dfpara <- readxl::read_xlsx("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/005_geneHaplotype/000_gene_hsmap/gene_block_hsmap.xlsx") %>% 
+  filter(GeneName != "GRM5") %>% 
+  # filter(Archaic == "Neanderthal") %>% 
+  # distinct(ChunkID,.keep_all = T) %>% 
+  mutate(a=2)
+
+# 定义基础路径
+base_hapmap_path <- ""
+base_output_path <- ""
+###============================================================================= parameter end
+
+df_target <- dfpara %>% 
+  filter(GeneName %in% target_genes) %>%
+  # filter(ChunkID %in% target_chunks ) %>% 
+  mutate(a=1)
+
+dfpara0 <- df_target
+for(i in 1:nrow(dfpara0)) {
+  # 获取当前基因的参数
+  geneName <- dfpara0$GeneName[i]
+  DenBlock <- str_sub(dfpara0$ChunkID[i],2) 
+  archaic <- dfpara0$Archaic[i]
+  BlockID <- dfpara0$ChunkID[i]
+  chunkStart <- dfpara0$ChunkStart_HG38
+  chunkEnd <- dfpara0$ChunkEnd_HG38
+  chr <- dfpara0$Chr 
+  
+  ### gene track 里面的位置
+  target_chr <- str_replace(chr,"chr","")
+  start_pos <- chunkStart
+  end_pos <- chunkEnd
+  
+  ### example
+  # target_chr <- "chr1" 
+  # start_pos <- 2309368
+  # end_pos <- 3389548
+  
+  cat("正在处理基因:", geneName, "，区块:", DenBlock, "\n")
+  
+  if(archaic == "Denisovan"){
+    archaicInhapmap <- "Den"
+    # 构建文件路径
+    hapmapfile <- file.path(base_hapmap_path, paste0("Den_", DenBlock, ".merge.easy_region.filt_chr.hapmap.xlsx"))
+  }
+  if(archaic == "Neanderthal"){
+    archaicInhapmap <- "NeanAltai"
+    # 构建文件路径
+    hapmapfile <- file.path(base_hapmap_path, paste0("Nean_", DenBlock, ".merge.easy_region.filt_chr.hapmap.xlsx"))
+  }
+  
+  outfile <- file.path(base_output_path, paste0(geneName,"_",BlockID, "_introgressionSites.txt")) 
+  # outfile2 <- file.path(base_output_path2, paste0(geneName,"_",BlockID, "_AllSitesFrequency.txt")) 
+
+  
+  cat("  ✅ 文件存在，开始处理...\n")  
+  
+  ### ============================= 开始自动查找 introgression sites 
+  ### ============================================================ 过滤位点
+  chunk <- BlockID
+  
+  df_introgressionSite <- df_introgressionSite0 %>% 
+    # read_tsv("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/007_vepAnnotation/004/selected.gene.introAnno.txt") %>% 
+    mutate(AF_ai = (nAFR_geno2 + nnonAFR_geno2)*2/ (n_AFR +n_nonAFR)) %>% 
+    # filter(AF_ai > 0.05, AF_ai < 0.95) %>% 
+    filter(BlockID == chunk) %>% 
+    ### hg38
+    mutate(seqnames = `#CHROM`,start = POS_HG38, end = POS_HG38)
+  ### chm13
+  # mutate(seqnames = `#CHROM`,start = POS, end = POS) %>% 
+  
+  ### ============================================================ cre注释
+  ### 添加其他注释信息 CRE
+  df_cre_subset <- df_cre %>% filter(Chr == chr, Start > chunkStart - 1000 , Start < chunkEnd + 1000)
+  
+  
+  ### ============================================================ eqtl 注释
+  # df_inter_eqtl <- df_introgressionSite %>% inner_join(df_eqtl2,by=c("seqnames"="Chr","start" = "Pos")) %>% 
+  #   arrange(seqnames,start)
+  
+}
+
+
+
+## S2:plot try1 -- gene track 可以当做模版用
+
+## track的高度是加减 1.5，因此track的高度是 3
+
+## <!-- 每层之间的高度是2.5，为了使其他 track更加突出，因此，新加的track y轴高度加了1 -->
+  
+#   unique(df_introgressionSite$Consequence)
+# [1] "intergenic_variant"                           "regulatory_region_variant"                    "downstream_gene_variant"                     
+# [4] "upstream_gene_variant"                        "intron_variant,non_coding_transcript_variant" "intron_variant"                              
+# [7] "non_coding_transcript_exon_variant"           NA                                             "TF_binding_site_variant"                     
+# [10] "3_prime_UTR_variant"                          "intron_variant,NMD_transcript_variant"        "missense_variant"                            
+# [13] "3_prime_UTR_variant,NMD_transcript_variant"   "5_prime_UTR_variant"                         
+# > 
+#   > unique(df_introgressionSite$BIOTYPE)
+# [1] "-"                              "enhancer"                       "lncRNA"                         "protein_coding"                 "retained_intron"               
+# [6] "miRNA"                          NA                               "open_chromatin_region"          "TEC"                            "protein_coding_CDS_not_defined"
+# [11] "CTCF_binding_site"              "TF_binding_site"                "nonsense_mediated_decay"        "aligned_transcript"             "misc_RNA"                      
+# [16] "pseudogene"           
+
+
+### ============================================================ step1:读入文件，挑选区域
+# 读取GFF3文件。# 文件过大，需要时打开运行
+# gff_file <- "/Users/Aoyue/project_pos/APG_archaicDNA/001_data/000_source/chm13v2.0_RefSeq_Liftoff_v5.2.gff3.gz" 
+gff_file <- "/Users/Aoyue/project_pos/human_ILS/002_dataAnalysis/002_geneAnnotation/002_gff/Homo_sapiens.GRCh38.111.gff3.gz"
+# gff_data <- import(gff_file)
+
+### hg38
+# target_chr <- 1  # 请替换为您的染色体名称：hg38参考基因组的染色体为1，这里必须为数字。chm13基因组的染色体为 chr1。
+# start_pos <- 2777949
+# end_pos <- 3985267
+
+# ### chm13
+# target_chr <- "chr1" 
+# start_pos <- 2309368
+# end_pos <- 3389548
+
+
+# 提取该区域的所有特征
+region_features <- gff_data[
+  seqnames(gff_data) == target_chr &
+    start(gff_data) <= end_pos &
+    end(gff_data) >= start_pos
+]
+
+# 转换为数据框以便于ggplot2处理
+region_df <- as.data.frame(region_features)
+
+### ============================================================ step2: 筛选数据类型
+# 筛选出我们关心的特征类型：基因、外显子
+gene_region_df <- region_df %>%
+  filter(type %in% c("gene", "exon")) %>%
+  # 为基因添加显示高度（用于在图中错开显示）
+  group_by(ID) %>%
+  mutate(gene_display_height = cur_group_id()) %>%
+  ungroup()
+
+# 查看提取到的数据
+head(gene_region_df[, c("seqnames", "start", "end", "type", "gene_id", "gene_display_height")])
+
+### ============================================================ step3:其他数据框的输入准备
+### 添加重要渗入位点的标记
+chunk <- BlockID
+df_introgressionSite <- df_introgressionSite0 %>%  
+  # read_tsv("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/007_vepAnnotation/004/selected.gene.introAnno.txt") %>% 
+  # mutate(AF_ai = (nAFR_geno2 + nnonAFR_geno2)*2/ (n_AFR +n_nonAFR)) %>% 
+  # mutate(ifAFmore0.05 = if_else(AF_ai>0.05 & AF<0.95, "Y","N")) %>% 
+  # filter(AF_ai > 0.05, AF_ai < 0.95) %>% 
+  filter(BlockID == chunk) %>% 
+  ### hg38
+  mutate(seqnames = `#CHROM`,start = POS_HG38, end = POS_HG38) %>%
+  ### chm13
+  # mutate(seqnames = `#CHROM`,start = POS, end = POS) %>% 
+  mutate(gene_display_height = max(gene_region_df$gene_display_height) + 5)
+
+###write_tsv(df_introgressionSite,  str_c("~/Documents/",geneName,"_",BlockID,".txt"))
+library(writexl)
+write_xlsx(df_introgressionSite,  str_c("~/Documents/",geneName,"_",BlockID,".xlsx"))
+
+### 调控区
+df_track2 <- df_introgressionSite %>% 
+  filter(Consequence %in% c("regulatory_region_variant", "TF_binding_site_variant")) %>% 
+  mutate(BIOTYPE = if_else(BIOTYPE == "-", Consequence, BIOTYPE)) %>% 
+  mutate(base_height = max(gene_region_df$gene_display_height) + 8) %>%
+  group_by(BIOTYPE) %>%
+  mutate(
+    point_index = row_number(),
+    group_size = n(),
+    # 直接计算，当group_size=1时分母为0，用ifelse处理
+    vertical_offset = (point_index - 1) * 0.4 / pmax(group_size - 1, 1) - 0.2,
+    gene_display_height = base_height + vertical_offset
+  ) %>%
+  ungroup() %>%
+  select(-base_height, -point_index, -vertical_offset, -group_size)
+
+### 非同义突变
+df_track3 <- df_introgressionSite %>% 
+  filter(Consequence %in%c("missense_variant")) %>% 
+  mutate(gene_display_height = max(gene_region_df$gene_display_height) + 11)
+
+### 添加其他注释信息 CRE
+df_cre_geneTrack <- df_cre_subset %>%
+  mutate(gene_display_height = max(gene_region_df$gene_display_height) + 8)
+
+# if(nrow(df_inter_eqtl) == 0) {
+#   cat("This gene has no introgression sites with eQTL")
+#   
+# } else{
+#   df_inter_eqtl_geneTrack <- df_inter_eqtl %>% 
+#     mutate(gene_display_height = max(gene_region_df$gene_display_height) + 9)
+# } 
+
+
+
+### ============================================================ step4:正式画图
+# 定义10种预选形状
+predefined_shapes <- c(16, 17, 15, 18, 8, 3, 4, 5, 11, 12)
+# 常见形状：16=圆点, 17=三角形, 15=方块, 18=菱形, 8=星形, 3=加号, 4=叉号, 5=菱形, 11=星形, 12=方块带叉
+consequence_colors <- c(
+  "regulatory_region_variant" = "#E15759",
+  "TF_binding_site_variant" = "#499894", 
+  "missense_variant" = "#FFC107",
+  "synonymous_variant" = "#76B7B2",
+  "intron_variant" = "#B07AA1",
+  "upstream_gene_variant" = "#59A14F",
+  "downstream_gene_variant" = "#EDC948",
+  "intergenic_variant" = "#FF9DA7"
+)
+
+biotype_shape <- c("enhancer" = 25, 
+                   "protein_coding" = 8, 
+                   "CTCF_binding_site" = 23,
+                   "open_chromatin_region" = 4,
+                   "TF_binding_site" = 24,
+                   "TF_binding_site_variant" = 24
+)
+
+### ============================================================ 
+advanced_gene_plot <- ggplot() +
+  # 按链性绘制基因主体（正向链和反向链用不同颜色）
+  geom_segment(
+    data = gene_region_df %>% filter(type == "gene"),
+    aes(x = start, xend = end, y = gene_display_height, yend = gene_display_height,
+        color = strand),
+    # linewidth = 0.6
+    linewidth = 0.4/.pt
+  ) +
+  
+  # 添加方向箭头（显示转录方向）
+  geom_segment(
+    data = gene_region_df %>% filter(type == "gene"),
+    aes(x = ifelse(strand == "+", end -500, start + 500), 
+        xend = ifelse(strand == "+", end, start),
+        y = gene_display_height, 
+        yend = gene_display_height),
+    arrow = arrow(length = unit(0.07, "cm"), type = "closed"),
+    # size = 0.8
+    # size = 0.4
+    size = 0.5/.pt
+  ) +
+  
+  # 绘制外显子
+  geom_rect(
+    data = gene_region_df %>% filter(type == "exon"),
+    aes(xmin = start, xmax = end, 
+        ymin = gene_display_height - 1.5 , 
+        # linetype = strand,
+        # fill = strand,
+        ymax = gene_display_height + 1.5
+    ),
+    # color = "#2E86AB",
+    color = "NA",
+    fill = "gray90",
+    
+    alpha = 0.9
+  ) +
+  
+  ##### 绘制渗入位点
+  geom_segment(
+    data = df_introgressionSite,
+    aes(x = start, 
+        xend = start,
+        y = gene_display_height - 1.5, 
+        yend = gene_display_height + 1.5),
+    color = "red",
+    size = introSize,
+    alpha = 0.8
+  ) + 
+  
+  ###### 绘制 cre
+  geom_rect(
+    data = df_cre_geneTrack,
+    aes(xmin = Start, xmax = End,
+        ymin = gene_display_height - 0.25,
+        ymax = gene_display_height + 0.25,
+        fill = "#2E86AB"),
+    alpha = 0.8
+  ) +
+  
+  ###### 绘制调控元件
+  geom_point(
+    data = df_track2,
+    aes(x = start, y = gene_display_height,
+        shape = BIOTYPE,
+        # fill = "#2E86AB"),
+        fill = Consequence,
+        color = Consequence
+    ),
+    # shape = 25,
+    size = 1.2,
+    alpha = 0.8
+  ) +
+  
+  geom_point(
+    data = df_track3,
+    aes(x = start, y = gene_display_height,
+        shape = BIOTYPE,
+        # fill = "#2E86AB"),
+        fill = Consequence,
+        color = Consequence
+    ),
+    # shape = 25,
+    size = 1.2,
+    alpha = 0.8
+  ) +
+  
+  # 基因名称标签
+  # geom_label(
+  #   data = gene_region_df %>% filter(type == "gene"),
+  #   aes(x = (start + end)/2, y = gene_display_height - 1, 
+  #       label = ifelse(!is.na(Name), Name, gene_id)),
+  #   size = 2, fill = "white", alpha = 0.8
+  # ) +
+  # 7. 基因名称标签
+  geom_text_repel (
+    data = gene_region_df %>% filter(type == "gene"),
+    aes(x = (start + end)/2, 
+        y = gene_display_height - 0.7,
+        label = ifelse(!is.na(Name), Name, gene_id)),
+    # label = ifelse(!is.na(gene_name), gene_name, gene)),
+    # size = 6/.pt, 
+    size = 5/.pt, 
+    direction = "y",  # 只允许在Y方向移动
+    nudge_y = -0.5,   # 初始向下偏移0.5
+    force = 0.5,      # 减小避让力度
+    segment.size = 0.2,  # 连接线粗细
+    min.segment.length = 0,  # 总是显示连接线
+    box.padding = 0.1,  # 减少标签周围填充
+    point.padding = 0.1,
+    max.overlaps = Inf,
+    alpha = 0.8
+  ) +
+  # 颜色设置
+  # scale_color_manual(values = c("+" = "#E15759", "-" = "#499894")) +
+  # scale_fill_manual(values = c("+" = "#E15759", "-" = "#499894")) +
+  # 5. 添加颜色比例尺
+  scale_color_manual(
+    values = consequence_colors,
+    name = "Consequence",
+    na.value = "grey50"  # NA值用灰色
+  ) +
+  scale_fill_manual(
+    values = consequence_colors,
+    name = "Consequence", 
+    na.value = "grey50"
+  ) + 
+  scale_shape_manual(values = biotype_shape, name = "Biotype", na.value = 6) +
+  # 坐标轴和主题
+  labs(
+    title = str_c("Gene Structure in chr", target_chr, ":", 
+                  format(start_pos, big.mark = ","), "-", 
+                  format(end_pos, big.mark = ",")),
+    x = "Genomic position (bp)",
+    y = NULL
+    # color = "Strand",
+    # fill = "Strand"
+  ) +
+  # scale_x_continuous(n.breaks = 10, labels = function(x) format(x, big.mark = ",") ) +
+  # 添加X轴缩放和标签格式化
+  scale_x_continuous(n.breaks = 10, labels = function(x) {sprintf("%.3f", x / 1e6) }) +
+    theme_bw() +
+    theme(
+    # legend.position = "none",
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.minor.y = element_blank()
+  )
+
+# print(advanced_gene_plot)
+# ggsave("~/Documents/gene_track.pdf",advanced_gene_plot,width = 8, height = 8)
+
+### 设置图例大小
+advanced_gene_plot1 <- advanced_gene_plot +
+  scale_x_continuous(n.breaks = 10, labels = function(x) {sprintf("%.3f", x / 1e6) }) +
+  guides(
+    color = guide_legend(
+      override.aes = list(size = 3),  # 调整颜色标记大小
+      keywidth = unit(1, "cm"),
+      keyheight = unit(1, "cm")
+    ),
+    fill = guide_legend(
+      override.aes = list(size = 3),  # 调整填充标记大小
+      keywidth = unit(1, "cm"),
+      keyheight = unit(1, "cm"),
+      nrow = 1
+    ),
+    # 调整 Biotype 图例（形状）
+    shape = guide_legend(
+      override.aes = list(size = 3),  # 调整形状大小
+      keywidth = unit(1, "cm"),
+      keyheight = unit(1, "cm")
+    ))
+
+ggsave("~/Documents/gene_track_legend.pdf",advanced_gene_plot1,width = 8, height = 8)
+
+  
+advanced_gene_plot2 <- advanced_gene_plot+
+  theme(plot.title = element_blank(),
+        legend.position = "none",
+        axis.text =  element_text(size = 6),
+        axis.title = element_text(size = 7),
+        legend.title = element_text(size=9),
+        legend.text = element_text(size = 9),
+        axis.ticks = element_line(linewidth = 0.4/.pt), 
+        # axis.ticks.length = unit(2, "pt")  # 刻度线长度
+        panel.border = element_rect(linewidth = 0.4, colour = "black", fill = NA)
+  )
+
+ggsave("~/Documents/gene_track2.pdf",advanced_gene_plot2,width = 2.9, height = 1.5)
