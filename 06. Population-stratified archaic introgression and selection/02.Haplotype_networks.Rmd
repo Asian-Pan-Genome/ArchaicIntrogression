@@ -15,18 +15,6 @@ output:
 ---
 
 
-```{r setup, echo =T, message = T, warning = F}
-library(tidyverse)
-# library(RColorBrewer)
-library(ggpubr)
-# library(egg)
-## eval 代码要不要运行
-## echo 代码要不要输出
-## include 图要不要输出
-## warning 警告要不要输出
-## message 默认Bin等信息要不要输出
-```
-
 ## work1: hapResult hapSummary hapNet
 
 ```{r}
