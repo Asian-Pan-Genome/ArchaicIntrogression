@@ -12,3 +12,4 @@ To ensure high-quality variant calls across different types of sequencing data:
 
 ## 03. CN-based case analysis (_MGAM_ gene)
 
+## Key Tools & Versions
