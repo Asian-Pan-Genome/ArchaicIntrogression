@@ -144,10 +144,3 @@ python 07.expression.MAGE.2.py <(rg -f test.list Nean_SV.pvalue) ENSG00000169155
 - The expression file (`TMM.filtered.TSS.MAGE.v1.0.bed`) and VCF path are hardcoded in the script; adjust if needed.  
 - Output PDF: `ZBTB43.MAGE.pdf`.
 
-## Notes
-- All scripts assume a specific directory structure. Modify paths according to your setup.
-- The R notebooks often use `conflicted` to resolve function name clashes; ensure it is installed.
-
-## Contact
-For questions or issues, please contact the corresponding author or open an issue on the GitHub repository.
-
