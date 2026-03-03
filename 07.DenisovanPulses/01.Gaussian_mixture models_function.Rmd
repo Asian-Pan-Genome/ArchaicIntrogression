@@ -1,0 +1,823 @@
+---
+title: "Data analysis"
+author: "Aoyue Bi"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float:
+      toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: simplex 
+    highlight: haddock 
+---
+
+# Gaussian mixture models function and application, and determination of the optimal model
+
+## step1: Plot histogram to observe density distribution first
+
+```{r}
+library(tidyverse)
+library(conflicted)
+conflict_prefer(dplyr::filter)
+
+infile <- "/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/007_ASMai/013_mergefromUp/001_Den_tracts.CHM13.bed.gz"
+df_asmai <- read_tsv(infile) %>% mutate(width_seg = end-start, posterior = intro_prob)
+
+### Create grouping of samples
+df_popInfoAPG <- read_tsv("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/007_ASMai/000_popInfo/001_PopInfo_APG.txt")
+
+### Join tables
+df0 <- df_asmai %>% left_join(df_popInfoAPG, by = c("Assembly_ID"))
+
+df <- df0 %>% 
+  mutate(Denisovan = weighted_match_rate) %>% 
+  ### Which segments to analyze
+  filter(Denisovan > 0.30) %>% 
+  filter(width_seg > 20000) %>%
+  filter(posterior >= 0.9) %>% 
+  filter(Assembly_ID %in% c("C088-CHA-C08-Mat","C130-CYI02-Mat","C152-CKZ06-Mat","C021-CHA-S01_2-Pat","C027-CHA-S07-Mat","HG02106_hap2")) %>%
+  group_by(Assembly_ID) %>% 
+  mutate(N_segment = n()) %>% 
+  mutate(label = str_c("Num_seg: ",N_segment)) %>% 
+  ungroup()
+
+cat("Total number", nrow(df %>% group_by(Assembly_ID) %>% count())) 
+
+#### Overall distribution of Denisovan ratios across all segments
+p <- df %>%
+  ggplot(aes(x = Denisovan)) +
+  geom_histogram(aes(y = after_stat(density), fill = N_segment), 
+                 # fill = NA, 
+                 # fill =  "#0072B2",
+                 alpha = 0.7, 
+                 bins = 50) +
+  # Density plot (no fill, thicker line)
+  geom_density(linewidth = 0.5, adjust = 0.5, alpha = 0.99, fill = NA, color = "gray15") +
+  labs(
+    x = "Match to Altai Denisovan",
+    y = "Density"
+  ) +
+  scale_fill_viridis_c() +  # Use viridis palette
+  scale_x_continuous(limits = c(0,1), breaks = seq(0,1,0.1)) +
+  # facet_wrap(~Assembly_ID, scales = "free", ncol = 6) +
+  facet_wrap(~Assembly_ID, ncol = 3, scales = "free_y") +
+  theme_classic() +
+  theme(
+    strip.text = element_text(face = "bold"),
+    legend.position = "bottom",
+    panel.grid.major = element_line(color = "gray90"),
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    text = element_text(size = 7),
+    ### Facet theme settings
+    strip.background = element_blank(),  # remove title border
+    strip.text.x = element_text(
+      face = "bold",
+      hjust = 0,  # left align
+      vjust = 1,  # top align
+      margin = margin(t = 0, r = 0, b = 0.2, l = 0.2)),  # adjust spacing from plot
+    plot.subtitle = element_text(hjust = 0.5, color = "gray40"))
+      
+# Save as PNG (high resolution)
+filename <- str_replace(str_c("~/Documents/","CHA-S","_Den_match_rate_distributions.pdf"), "-", "_")
+# ggsave(filename = filename, plot = p, width = 15, height = 30, bg = "white", limitsize = FALSE)
+# Display the plot
+print(p)
+ggsave(filename = filename, plot = p, width = 6, height = 4, bg = "white", limitsize = FALSE)
+```
+
+## step2: Loop to perform likelihood ratio tests – applicable to match rate detection for individual segments
+
+This chunk is a function
+
+```{r}
+library(tidyverse)
+library(mclust)
+library(mixtools)
+library(patchwork)
+library(diptest)
+library(scico)
+
+fun_getGMM_result <- function(df, Pop_para) {
+
+  # Assume df is your data frame and df$Denisovan is the column to analyze
+  # Set population name; here "Pop" can refer to a population or individual data, it's just a placeholder
+  # Pop_para <- "CZA"
+
+  # Count the number of samples
+  num_seg <- nrow(df)
+
+  ################################## Initialize results, bic_values, fit_objects
+  # Initialize results data frame
+  results <- tibble(
+    Pop = Pop_para,
+    Num = num_seg,
+    k1 = NA,
+    k2 = NA,
+    k3 = NA,
+    p_k2k1 = NA,
+    p_k3k2 = NA
+  )
+
+  # Initialize BIC values and fit objects
+  bic_values <- c()
+  fit_objects <- list()
+  ################################## Calculate BIC, populate results, output result files
+
+  ### For k = 1, manually compute
+  mean_value <- mean(df$Denisovan)
+  sd_value <- sd(df$Denisovan)
+  ### Compute log-likelihood (log-likelihood of normal distribution)
+  log_likelihood_k1 <- sum(dnorm(df$Denisovan, mean = mean_value, sd = sd_value, log = TRUE))
+  # Compute BIC (n = sample size, k = 2 parameters: mean and sd)
+  n <- num_seg
+  bic_value <- -2 * log_likelihood_k1 + 2 * log(n)
+
+  ### Append the k=1 value to the vector
+  bic_values <- bic_value
+  results[["k1"]] <- bic_value
+
+  df_k1_bic <- tibble(Pop = Pop_para, Num = num_seg, BIC = bic_value, BIC_diff = NA, LRT_p_value = NA, LRT_p_value_formatted = NA)
+  write_tsv(df_k1_bic, str_c("~/Documents/00/", Pop_para, "_GMM_k1BIC_LRT_sig_test.txt"))
+
+  # Create plot
+  p_k1 <- ggplot(df, aes(x = Denisovan)) +
+    geom_histogram(aes(y = ..density..), bins = 50, 
+                   # y = after_stat(density)
+                   fill = "lightblue", alpha = 0.7) +
+    geom_density(color = "blue", linewidth = 0.6, adjust = 0.5) +  # control smoothness
+    scale_x_continuous(limits = c(0,1), breaks = seq(0,1,0.1)) +
+    labs(x = "Match to Altai Denisovan",
+         title = paste(Pop_para, ": GMM Fit with", 1, "Components"),
+         # title = paste("EAS: GMM Fit with", k, "Components"),
+         y = "Density") +
+    theme_bw() +
+    scale_color_viridis_d() +
+    theme(plot.title = element_text(hjust = 0.5, size = 9),
+          axis.text =  element_text(size = 9),
+          axis.title = element_text(size = 9),
+          legend.title = element_text(size = 9),
+          legend.text = element_text(size = 9))
+
+  p_k1
+    
+  ggsave(str_c("~/Documents/00/", Pop_para, "_denisovan_GMManalysis_Fit", 1, ".pdf"), p_k1, width = 4/1.3, height = 3/1.3)
+  
+  ################################## Method 1: mclust (automatically selects k based on BIC)
+  custom_bic <- mclustBIC(df$Denisovan, G = 1:3)
+  png(str_c("~/Documents/00/", Pop_para, "_GMM_BIC_mclust.png"), width = 800, height = 600, res = 120)  # set image dimensions and resolution
+  plot(custom_bic, main = str_c(Pop_para, " BIC values for GMM models based mclust"))  # visualize BIC values
+  dev.off()
+
+  fit_mclust <- Mclust(df$Denisovan, G = 1:3, nstart = 50)
+  optimal_k <- fit_mclust$G
+  summary(fit_mclust)  # view optimal number of modes (e.g., G=2 indicates bimodal)
+  cat("Optimal number of components (mclust):", optimal_k, "\n")
+  dfmclust <- tibble(Pop = Pop_para, k_optimal_mclust = optimal_k)
+  write_tsv(dfmclust, str_c("~/Documents/00/", Pop_para, "_GMM_BIC_mclust.txt"))
+
+  ################################## Method 2: mixtools (remember to sort parameters)
+  # 3. Loop k = 2 to k = 5 for fitting and plotting
+  gmm_plots <- list()
+  tukey_results <- list()
+
+  # Loop to compute BIC values for 1 to 5 Gaussian components
+  for (k_in in 2:3) { ################################## start of loop for k_in in 2:5
+
+    set.seed(123)  # any fixed value
+
+    # Use withCallingHandlers to catch specific warnings
+    fit_k_in <- tryCatch({
+      withCallingHandlers({
+        fit <- normalmixEM(df$Denisovan, k = k_in, arbmean = TRUE, epsilon = 1e-3)
+        
+        # Check if any variance approaches zero
+        if (any(fit$sigma < 1e-4)) {
+          warning(paste("Population", Pop_para, "detected variance near zero at k =", k_in))
+          return(NULL)
+        }
+        fit
+      },
+      warning = function(w) {
+        if (grepl("One of the variances is going to zero", w$message)) {
+          # Return NULL for this specific warning
+          invokeRestart("muffleWarning")
+          return(NULL)
+        }
+      })
+    }, error = function(e) {
+      warning(paste("Population", Pop_para, "failed to fit at k =", k_in, ":", e$message))
+      NULL
+    })
+    
+    # If fit failed or returned NULL, skip subsequent logic for this k_in
+    if (is.null(fit_k_in)) {
+      bic_values <- c(bic_values, NA)
+      fit_objects[[k_in]] <- NULL
+      results[[paste0("k", k_in)]] <- NA
+      next
+    }
+
+    # Sort parameters by mean
+    order_idx <- order(fit_k_in$mu)
+    fit_k_in$mu <- fit_k_in$mu[order_idx]
+    fit_k_in$sigma <- fit_k_in$sigma[order_idx]
+    fit_k_in$lambda <- fit_k_in$lambda[order_idx]
+    fit_k_in$posterior <- fit_k_in$posterior[, order_idx]
+  
+    # Compute BIC
+    # Compute BIC (extract log-likelihood from fit object)
+    bic <- function(loglik, k, n) {-2 * loglik + k * log(n)}
+    bic_k_in <- bic(fit_k_in$loglik, k_in * 2 + (k_in - 1), nrow(df))
+    bic_values <- c(bic_values, bic_k_in)
+    fit_objects[[k_in]] <- fit_k_in
+  
+    # Store BIC value in results data frame
+    results[[paste0("k", k_in)]] <- bic_k_in
+  
+    ################################## mixtools
+    ### 1. Dynamically generate group labels (supports any k value)
+    get_cluster_labels <- function(posterior_matrix) {
+      apply(posterior_matrix, 1, which.max) %>% 
+        as.factor() %>% 
+        paste0("Group", .)
+    }
+  
+    df[[paste0("cluster_k", k_in)]] <- get_cluster_labels(fit_k_in$posterior)
+    
+    # 5. Dynamically plot GMM fitted curve (supports any k value)
+    plot_gmm_fit <- function(data, fit, k, Pop_in) { ################################## plot_gmm_fit function start, this function plots
+      # Generate fitted curve data
+      x <- seq(min(data), max(data), length.out = 1000)
+      curve_data <- map_dfr(1:k, ~{
+        tibble(
+          x = x,
+          y = fit$lambda[.x] * dnorm(x, fit$mu[.x], fit$sigma[.x]),
+          component = paste0("μ = ", round(fit$mu[.x], 3))  # add mean label
+        )
+      })
+
+      # Modify threshold calculation part, add tryCatch error handling
+      thresholds <- map_dbl(1:(k-1), ~{
+        tryCatch({
+          uniroot(
+            function(x) fit$lambda[.x] * dnorm(x, fit$mu[.x], fit$sigma[.x]) - 
+              fit$lambda[.x+1] * dnorm(x, fit$mu[.x+1], fit$sigma[.x+1]),
+            interval = c(fit$mu[.x], fit$mu[.x+1])
+          )$root
+        }, error = function(e) {
+          # If error occurs, return NA and print warning
+          warning(paste("Cannot compute threshold", .x, "for population", Pop_para, "with k =", k_in, ":", e$message))
+          NA_real_
+        })
+      })
+
+      # Filter out NA values if needed
+      thresholds <- thresholds[!is.na(thresholds)]
+        
+      # Create plot
+      p <- ggplot(df, aes(x = Denisovan)) +
+        geom_histogram(aes(y = ..density..), bins = 50, 
+                       # y = after_stat(density)
+                       fill = "lightblue", alpha = 0.8) +
+        geom_density(color = "blue", linewidth = 0.5, adjust = 0.5) +  # control smoothness
+        geom_line(data = curve_data, aes(x, y, color = component), 
+                  linewidth = 0.5) +
+        # geom_vline(xintercept = thresholds, linetype = "dashed", 
+        #            color = "gray50") +
+        # Add mean markers
+        geom_vline(
+          xintercept = fit$mu,
+          linetype = "dotted",
+          color = "green",
+          alpha = 0.7
+        ) +
+        geom_text(
+          data = tibble(x = fit$mu, y = 1),
+          aes(x = x, y = 0.6, label = paste("μ:", round(x, 3))),
+          vjust = -0.5, 
+          color = "darkgreen",
+          size = 2
+        ) +
+        scale_color_viridis_d() +
+        scale_x_continuous(limits = c(0.3,1), breaks = seq(0,1,0.1)) +
+        labs(x = "Match to Altai Denisovan",
+             title = paste(Pop_in, ": GMM Fit with", k, "Components"),
+             y = "Density") +
+        theme_bw() +
+        theme(plot.title = element_text(hjust = 0.5, size = 9),
+              axis.text =  element_text(size = 9),
+              axis.title = element_text(size = 9),
+              legend.title = element_text(size = 9),
+              legend.text = element_text(size = 9))
+      
+      p
+      
+      ggsave(str_c("~/Documents/00/", Pop_in, "_denisovan_GMManalysis_Fit", k, ".pdf"), p, width = 5, height = 2)
+      
+      return(p)
+    } ################################## plot_gmm_fit function end
+
+    # Plot GMM for current k
+    # Generate and check plot for current k
+    current_plot <- plot_gmm_fit(df$Denisovan, fit_k_in, k_in, Pop_para) +
+      labs(title = paste(Pop_para, ": GMM Fit with ", k_in, " Components"))
+    if (inherits(current_plot, "ggplot")) {
+      gmm_plots[[k_in-1]] <- current_plot  # only save valid plots
+    } else {
+      warning(paste("Population", Pop_para, "k =", k_in, "GMM plot is invalid, not added to list"))
+    }
+  
+    # When k > 1, perform ANOVA and Tukey tests
+    # if (k_in > 1) {
+    #   anova_result <- aov(as.formula(paste("Denisovan ~", paste0("cluster_k", k_in))), data = df)
+    #   tukey_results[[k_in-1]] <- TukeyHSD(anova_result)[[1]] %>% 
+    #     as.data.frame() %>% 
+    #     rownames_to_column("Comparison") %>% 
+    #     mutate(K = k_in, Pop = Pop_para) 
+    # }
+  
+  } ################################## end of loop for k_in in 2:5
+
+  ################################## Output df file
+  # write_tsv(df, str_c("~/Documents/00/", Pop_para, "_MR_cluster.txt"))
+
+  ################################## Combine all GMM plots (modified part)
+  if (length(gmm_plots) > 0 && all(sapply(gmm_plots, inherits, "ggplot"))) {
+    # Only combine and save if there are valid ggplot objects
+    combined_gmm_plots <- wrap_plots(gmm_plots, ncol = 1)
+
+    ggsave(
+      str_c("~/Documents/00/", Pop_para, "_combined_gmm_fits_denisovan.pdf"), 
+      plot = combined_gmm_plots, 
+      width = 5, 
+      height = 2 * length(gmm_plots)  # height dynamically based on number of plots
+    )
+  } else {
+    # If empty, print warning and skip saving
+    warning(paste("Population", Pop_para, "has no combinable GMM plots, skipping save"))
+  }
+
+  # 6. Combine all Tukey test results
+  # if (length(tukey_results) > 0) {
+  #   all_tukey_results <- bind_rows(tukey_results)
+  #   write_tsv(all_tukey_results, str_c("~/Documents/00/", Pop_para, "_GMM_TukeyHSD_results_all_k.txt"))
+  # }
+
+  ################################## After loop, select best model, compute p-value (difference in BIC between previous and next k, chi-square test for p-value)
+  # Select best model (model with smallest BIC), which.min returns position of minimum
+  # Initialize LRT p-value vector
+  lrt_p_values <- c() 
+
+  # LRT for k=2
+  # First check if fit_objects[[2]] exists
+  if (length(fit_objects) >= 2 && !is.null(fit_objects[[2]])) {
+    lrt_stat <- 2 * (fit_objects[[2]]$loglik - log_likelihood_k1)
+    p_value <- pchisq(lrt_stat, df = 3, lower.tail = FALSE)
+    results[["p_k2k1"]] <- p_value
+    lrt_p_values <- c(lrt_p_values, p_value)
+  } else {
+    # If not exist, mark as NA
+    results[["p_k2k1"]] <- NA
+    lrt_p_values <- c(lrt_p_values, NA)
+    warning(paste("Population", Pop_para, "fit result for k=2 does not exist, LRT cannot be computed"))
+  }
+
+  # LRT for k=3
+  if (!is.null(fit_objects[[3]]) && !is.null(fit_objects[[2]])) {
+    lrt_stat <- 2 * (fit_objects[[3]]$loglik - fit_objects[[2]]$loglik)
+    p_value <- pchisq(lrt_stat, df = 3, lower.tail = FALSE)
+    results[["p_k3k2"]] <- p_value
+    lrt_p_values <- c(lrt_p_values, p_value)
+  } else {
+    results[["p_k3k2"]] <- NA
+    lrt_p_values <- c(lrt_p_values, NA)
+  }
+  results$p_optimal <- results[[paste0("p_k", optimal_k_in, "k", optimal_k_in - 1)]]
+
+  ################################### Output BIC table
+  bic_df <- tibble(
+    Pop = Pop_para,
+    Num = num_seg,
+    k = 1:3,
+    BIC = bic_values,
+    BIC_diff = c(NA, diff(bic_values)),  # BIC difference
+    LRT_p_value = c(NA, lrt_p_values)   # LRT p-value
+  ) %>% 
+    mutate(
+      LRT_p_value_formatted = ifelse(
+        is.na(LRT_p_value), 
+        NA, 
+        format.pval(LRT_p_value, digits = 3)
+      )
+    )
+
+  write_tsv(bic_df, str_c("~/Documents/00/", Pop_para, "_GMM_BIC_LRT_sig_test.txt"))
+
+  ################################### Plot line graph of BIC values
+  p <- ggplot(bic_df, aes(x = k, y = BIC)) +
+    geom_line(color = "gray10", alpha = 0.5) +
+    geom_point(color = "orange", alpha = 0.5) +
+    geom_text(aes(label = paste0("ΔBIC: ", round(BIC_diff, 2), "\np: ", LRT_p_value_formatted)),
+              # vjust = -1,  # adjust label position
+              hjust = 0.9,
+              size = 1.6,
+              color = "blue") +
+    labs(x = "Number of Components (k)",
+         # title = str_c(Pop_para, "\nBIC Values for Gaussian Mixture Models"),
+         title = str_c(Pop_para),
+         y = "BIC Value by mixtools") +
+    theme_bw() +
+    theme(plot.title = element_text(hjust = 0.5, size = 9),
+          axis.text =  element_text(size = 9),
+          axis.title = element_text(size = 9))
+  # Save plot to file
+  # ggsave(str_c("~/Documents/00/", Pop_para, "_GMM_BIC_mixtools.png"), plot = p, width = 4, height = 3)
+
+  if (inherits(p, "ggplot")) {
+    # ggsave(str_c("~/Documents/00/", Pop_para, "_GMM_BIC_mixtools.png"), plot = p, width = 4, height = 3, dpi = 300)
+    ggsave(str_c("~/Documents/00/", Pop_para, "_GMM_BIC_mixtools.pdf"), plot = p, width = 2, height = 2)
+  } else {
+    warning(paste("Population", Pop_para, "BIC line plot is invalid, skipping save"))
+  }
+
+  ################################## Output mu, sigma, lambda for each model
+  # Initialize data frame to store GMM parameters
+  gmm_params <- tibble(
+    Pop = character(),
+    Num_seg = integer(),
+    K = integer(),
+    Component = character(),
+    mu = numeric(),
+    sigma = numeric(),
+    lambda = numeric()
+  )
+
+  ### For k=1,
+  gmm_params <- gmm_params %>% add_row(
+        Pop = Pop_para,
+        Num_seg = num_seg,
+        K = 1,
+        Component = str_c("Group", 1),
+        mu = round(mean_value, 3),
+        sigma = round(sd_value, 3),
+        lambda = 1
+  )
+
+  # # Loop over fit_objects (k=2 to k=3)
+  for (k_in in 2:3) {
+    fit <- fit_objects[[k_in]]
+    for (comp in 1:k_in) {
+      gmm_params <- gmm_params %>%
+        add_row(
+          Pop = Pop_para,
+          Num_seg = num_seg,
+          K = k_in,
+          Component = str_c("Group", comp),
+          mu = round(fit$mu[comp], 3),
+          sigma = round(fit$sigma[comp], 3),
+          lambda = round(fit$lambda[comp], 3)
+        )
+    }
+  }
+
+  # Output GMM parameters to file
+  write_tsv(gmm_params, str_c("~/Documents/00/", Pop_para, "_GMM_meanSD.txt"))
+
+  ################################# Above data, plot bar chart of mu, sigma, lambda for each model
+  p_lambda <- ggplot(gmm_params, aes(x = factor(K), y = lambda, fill = factor(Component))) +
+    geom_col(position = position_dodge(width = 0.8), width = 0.7) +  # side-by-side bars
+    geom_text(
+      aes(label = sprintf("μ=%.2f\nσ=%.2f\nλ=%.2f", mu, sigma, lambda)),  # display mu and sigma
+      position = position_dodge(width = 0.8),
+      vjust = -0.5,  # text position adjustment
+      size = 2,
+      color = "black"
+    ) +
+    scale_fill_scico_d(palette = "roma") +  # use scico roma palette
+    labs(
+      title = paste("GMM Component Proportions (Lambda) for Population:", unique(gmm_params$Pop)),
+      x = "Number of Components (K)",
+      y = "Proportion (Lambda)",
+      fill = "Component"
+    ) +
+    scale_y_continuous(limits = c(0, 1.1 * max(gmm_params$lambda)), breaks = seq(0, 0.6, 0.1)) +
+    theme_bw() +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold"),
+      legend.position = "right",
+      panel.grid.major.x = element_blank()
+    )
+
+  # Save plot
+  # ggsave(str_c("~/Documents/00/", Pop_para, "_GMM_lambda_plot.png"), plot = p_lambda, width = 8, height = 6, dpi = 300)
+
+  if (inherits(p_lambda, "ggplot")) {  # core check: ensure it is a valid ggplot object
+    ggsave(
+      str_c("~/Documents/00/", Pop_para, "_GMM_lambda_plot.png"),
+      plot = p_lambda,
+      width = 8,
+      height = 6,
+      dpi = 300
+    )
+  } else {
+    warning(paste("Population", Pop_para, "lambda plot is invalid, skipping save"))
+  }
+
+  # Explicitly return at the end of the function
+  return(invisible(NULL))  # invisible ensures no return value is printed
+}
+```
+
+## step3: data import and call the function
+
+```{r}
+infile <- "/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/007_ASMai/013_mergefromUp/001_Den_tracts.CHM13.bed.gz"
+df_asmai <- read_tsv(infile) %>% mutate(width_seg = end - start, posterior = intro_prob)
+
+### Create sample grouping
+df_popInfoAPG <- read_tsv("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/007_ASMai/000_popInfo/001_PopInfo_APG.txt")
+
+### Join tables
+df0 <- df_asmai %>% left_join(df_popInfoAPG, by = c("Assembly_ID"))
+
+df <- df0 %>% 
+  mutate(Denisovan = weighted_match_rate) %>% 
+  ### Which segments to analyze
+  filter(Denisovan > 0.30) %>% 
+  ### Segment lengths: 10k, 15k, 20k, 25k
+  filter(width_seg > 20000) %>%
+  filter(posterior >= 0.9) %>% 
+  filter(Assembly_ID %in% c("C088-CHA-C08-Mat","C130-CYI02-Mat","C152-CKZ06-Mat","C021-CHA-S01_2-Pat","C027-CHA-S07-Mat","HG02106_hap2")) %>%
+  ######################################
+  ### For melanesianHSAv1 overall test, also used segment length > 20 kbp
+  # filter(Denisovan > 0.35) %>%
+  # filter(Assembly_ID == "melanesianHSAv1") %>%
+  group_by(Assembly_ID) %>% 
+  mutate(N_segment = n()) %>% 
+  mutate(label = str_c("Num_seg: ", N_segment)) %>% 
+  ungroup()
+
+cat("Total number", nrow(df %>% group_by(Assembly_ID) %>% count())) 
+
+############ Call the function, finally actually used
+if (TRUE) {
+  df %>%
+    group_by(Assembly_ID) %>%
+    group_walk(~ {
+      tryCatch({
+        fun_getGMM_result(.x, .y$Assembly_ID)
+      }, error = function(e) {
+        message("Pop ", .y$Pop, " processing failed: ", e$message)
+        # Write failure information to log file
+        write_lines(paste(Sys.time(), "Pop", .y$Pop, "failed:", e$message),
+                   "error_log.txt", append = TRUE)
+      })
+    })
+}
+```
+
+## step4: merge results
+
+```{r}
+############################################################################# Move results and create folders
+
+library(tidyverse)
+library(fs)  # file system operations in tidyverse ecosystem
+library(conflicted)
+conflicted::conflicts_prefer(fs::path)
+# Define base directory
+base_dir <- path("~/Documents/00")
+
+folder_names_sum <- c("summary_bic","summary_meanSD")
+walk(folder_names_sum, ~ dir_create(path(base_dir, .x)))
+
+# 1. Define the 9 folders to create
+folder_names <- c(
+  "plot1_bic",
+  "plot2_gmm",
+  "plot3_lambda",
+  "plot4_bic_mclust",
+  "plot5_density",
+  "res1_bic",
+  "res2_meanSD",
+  "res3_optimal_bic_mclust",
+  "res4bic_k1"
+)
+
+# 2. Define corresponding target file suffixes (in same order as folders)
+file_suffixes <- c(
+  "GMM_BIC_mixtools.pdf",
+  "gmm_fits_denisovan.pdf",
+  "GMM_lambda_plot.png",
+  "GMM_BIC_mclust.png",
+  "GMManalysis_Fit1.pdf",
+  "GMM_BIC_LRT_sig_test.txt",
+  "GMM_meanSD.txt",
+  "GMM_BIC_mclust.txt",
+  "GMM_k1BIC_LRT_sig_test.txt"
+)
+
+# 3. Create folders (if they don't exist)
+walk(folder_names, ~ dir_create(path(base_dir, .x)))
+
+# 4. Move files to corresponding folders
+tibble(
+  folder = folder_names,
+  suffix = file_suffixes
+) %>%
+  pwalk(function(folder, suffix) {
+    # Find files in 00 directory matching the suffix
+    target_files <- dir_ls(base_dir, regexp = paste0(suffix, "$"))
+    
+    if (length(target_files) > 0) {
+      # Build destination folder path
+      dest_folder <- path(base_dir, folder)
+      
+      # Move files
+      file_move(target_files, dest_folder)
+      message(paste("Moved", suffix, "to", folder))
+    } else {
+      warning(paste("No files ending with", suffix, "found"))
+    }
+  })
+
+message("All operations completed!")
+############################################################################# Merge bic results
+
+base_dir <- path("~/Documents/00")
+
+library(purrr)
+inputDir <- fs::path(base_dir, "res1_bic")
+outfile <- fs::path(base_dir, "summary_bic", "001_matchRate_BIC.txt")
+
+df_bicMerge <- dir(inputDir, full.names = TRUE) %>%
+  keep(~ str_detect(basename(.x), "_GMM_BIC_LRT_sig_test.txt")) %>%
+  purrr::map(~{ read_tsv(.x) }) %>%
+  bind_rows()
+
+write_tsv(df_bicMerge, outfile)
+
+############################################################################## Merge meanSD results
+inputDir <- fs::path(base_dir, "res2_meanSD")
+outfile <- fs::path(base_dir, "summary_meanSD", "001_GMM_meanSD.txt")
+
+df_bicMerge <- dir(inputDir, full.names = TRUE) %>%
+  keep(~ str_detect(basename(.x), "GMM_meanSD.txt")) %>%
+  purrr::map(~{ read_tsv(.x) }) %>%
+  bind_rows()
+
+write_tsv(df_bicMerge, outfile)
+```
+
+## step5: Calculate optimal BIC – directly based on p-value judgment
+Function: Determine optimal k_fit based on BIC and p-values for k=1, k=2, k=3
+Input: BIC for all cases for each individual
+Output: BIC corresponding to optimal k_fit, and the corresponding pop anc information for each haploid
+
+```{r}
+
+library(tidyverse)
+##################
+### parameters
+##################
+if (FALSE) {
+  inputfile <- c("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/008_GMMfit/006_BIC4_segWidth_filter/01_10k/summary_bic/001_matchRate_BIC.txt")
+  outputfile <- c("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/008_GMMfit/006_BIC4_segWidth_filter/01_10k/summary_bic/002_matchRate_BIC_optimalK.txt")
+}
+
+if (FALSE) {
+  inputfile <- c("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/008_GMMfit/006_BIC4_segWidth_filter/02_15k/summary_bic/001_matchRate_BIC.txt")
+  outputfile <- c("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/008_GMMfit/006_BIC4_segWidth_filter/02_15k/summary_bic/002_matchRate_BIC_optimalK.txt")
+}
+
+if (FALSE) {
+  inputfile <- c("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/008_GMMfit/006_BIC4_segWidth_filter/04_20k/summary_bic/001_matchRate_BIC.txt")
+  outputfile <- c("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/008_GMMfit/006_BIC4_segWidth_filter/04_20k/summary_bic/002_matchRate_BIC_optimalK.txt")
+}
+
+if (FALSE) {
+  inputfile <- c("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/008_GMMfit/006_BIC4_segWidth_filter/03_25k/summary_bic/001_matchRate_BIC.txt")
+  outputfile <- c("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/008_GMMfit/006_BIC4_segWidth_filter/03_25k/summary_bic/002_matchRate_BIC_optimalK.txt")
+}
+
+if (TRUE) {
+  inputfile <- c("/Users/Aoyue/Documents/00/summary_bic/001_matchRate_BIC.txt")
+  outputfile <- c("/Users/Aoyue/Documents/00/summary_bic/002_matchRate_BIC_optimalK.txt")
+}
+
+##################
+### Start calculation
+##################
+df_bicMerge <- read_tsv(inputfile)
+# df_bicMerge <- read_tsv("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/008_GMMfit/pluses/002_chunk_matchRate_BIC.txt")
+# Process data logic
+df_processed <- df_bicMerge %>%
+  # 1. Filter out rows with NA BIC
+  filter(!is.na(BIC)) %>%
+  # 2. Group by Pop
+  group_by(Pop) %>%
+  # 3. Ensure each Pop group has k=1,2,3 data (if original data is incomplete, adjust accordingly)
+  filter(n() == 3) %>% 
+  # 4. Compute BIC differences
+  # mutate(
+  #   bic_diff_21 = BIC[k == 2] - BIC[k == 1],
+  #   bic_diff_32 = BIC[k == 3] - BIC[k == 2]
+  # ) %>%
+  # 5. Determine optimal k
+  group_modify(~ {
+    ### Decision rule: compare p-values for k=3 vs k=2; if significant, then k_fit = 3,
+    ### If not significant, compare p-values for k=2 vs k=1; if significant, k_fit = 2; if not significant, k_fit = 1
+
+    current_data <- .x
+    k_optimal <- unique(current_data$k_optimal)
+    # Get relevant p-values
+    p_k3 <- current_data$LRT_p_value[current_data$k == 3]
+    p_k2 <- current_data$LRT_p_value[current_data$k == 2]
+    
+    # Decision rule
+    if (p_k3 < 0.05) {
+      current_data <- current_data %>%
+        mutate(
+          k_fit = 3,
+          p_fit = p_k3
+        )
+    }
+    else if (p_k3 >= 0.05) {
+      if (!is.na(p_k2) && p_k2 < 0.05) {
+        current_data <- current_data %>%
+          mutate(
+            k_fit = 2,
+            p_fit = p_k2
+          )
+      } else {
+        current_data <- current_data %>%
+          mutate(
+            k_fit = 1,
+            p_fit = NA
+          )
+      }
+    }
+
+    # Key: must return a data frame (current_data already has new columns added)
+    return(current_data)
+  }) %>%
+  ungroup() 
+
+### Filter data, calculate optimal k
+df_processed2 <- df_processed %>% 
+  filter(k == k_fit) %>% 
+  select(Assembly_ID = Pop, "Num", "BIC", "BIC_diff", "LRT_p_value", "LRT_p_value_formatted", "k_fit", "p_fit")
+
+### Count number of fits for each k_fit
+table(df_processed2$k_fit)
+
+#################################################### Join population info
+### Re-group
+df_newClass <- tibble::tribble(
+  ~Pop, ~Pop_Manual,
+  "VIKI","KHV",
+  "MYBU","MMR",
+  "LALS", "LAO",
+  "LALL", "LAO",
+  "LALT","LAO",
+  "CMTO", "KHM",
+  "CMJA", "KHM",
+  "CMKH", "KHM",
+  "CMLA", "KHM",
+  "CMBR", "KHM",
+  "CMLU", "KHM",
+  "CMKE", "KHM",
+  "CMKA", "KHM",
+  "CMKR", "KHM",
+  "CMKU", "KHM",
+  "CMME", "KHM",
+  "CMPH", "KHM",
+  "CMST", "KHM",
+  "CMKL", "KHM"
+)
+
+### Classify by population
+df_popInfoAPG <- read_tsv("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/007_ASMai/000_popInfo/001_PopInfo_APG.txt") %>% 
+  mutate(Anc = if_else(Anc == "ACB.ASW", "AFR", Anc)) %>% 
+  mutate(Anc = if_else(Anc == "EAS-APG", "EAS", Anc)) %>% 
+  mutate(Anc = if_else(Pop == "MKK", "AFR", Anc)) %>% 
+  left_join(df_newClass, by = c("Pop")) %>% 
+  mutate(Pop_Manual = if_else(is.na(Pop_Manual), Pop, Pop_Manual)) %>% 
+  mutate(Pop1 = Pop) %>% 
+  mutate(Pop = Pop_Manual) %>% 
+  dplyr::select(Assembly_ID, Pop, Pop1, Anc, Num_Assembly_ID)
+
+df_processed3 <- df_processed2 %>% 
+  relocate(Assembly_ID) %>% 
+  left_join(df_popInfoAPG, by = c("Assembly_ID")) 
+  
+############################################################################# Calculate pluses proportion
+write_tsv(df_processed3, outputfile)
+```
+
+
+
