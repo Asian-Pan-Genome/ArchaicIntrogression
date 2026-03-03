@@ -1,0 +1,569 @@
+---
+title: "Data analysis"
+author: "Aoyue Bi"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float:
+      toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: simplex 
+    highlight: haddock 
+---
+
+# world_map
+
+## get VCF from HGDP & 1KGP project
+
+```{r}
+library(tidyverse)
+library(conflicted)
+
+conflicts_prefer(dplyr::filter)
+###============================================================================= parameter select
+vcf_file <- ("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/008_validateBy1KGP/002_vcf/PRDM16_N12_HGDP_refHG38_noAnno.vcf.gz")
+vcf_file2 <- ("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/008_validateBy1KGP/002_vcf/PRDM16_N12_1KGP_refHG38.vcf.gz")
+
+vcf_file <- "/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/008_validateBy1KGP/002_vcf/PRKCH_N5782_HGDP_refHG38_noAnno.vcf.gz"
+vcf_file2 <- "/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/008_validateBy1KGP/002_vcf/PRKCH_N5782_1KGP_refHG38.vcf.gz"
+
+vcf_file <- "/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/008_validateBy1KGP/002_vcf/CSGALNACT2_D2939_HGDP_refHG38_noAnno.vcf.gz"
+vcf_file2 <- "/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/008_validateBy1KGP/002_vcf/CSGALNACT2_D2939_1KGP_refHG38.vcf.gz"
+
+vcf_file <- "/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/008_validateBy1KGP/002_vcf/CH25H_D3015_HGDP_refHG38_noAnno.vcf.gz"
+vcf_file2 <- "/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/008_validateBy1KGP/002_vcf/CH25H_D3015_1KGP_refHG38.vcf.gz"
+
+# Read all lines of the file
+lines <- read_lines(vcf_file)
+# Count the number of lines starting with "##"
+skip_lines <- sum(substr(lines, 1, 2) == "##")
+# Use read_tsv to skip these lines
+df_vcf <- read_tsv(vcf_file, skip = skip_lines) %>% 
+  filter(str_length(REF) == 1, str_length(ALT) == 1)
+
+# View data
+head(df_vcf)
+
+# Get column names from column 10 to the last column
+column_names <- colnames(df_vcf)[10:ncol(df_vcf)]
+
+# Convert column names to dataframe, one column name per row
+df_columns <- tibble(sample = column_names)
+
+### Get unique values starting from column 10, from 0 to 33, a total of 34 haplotypes
+unique_values <- df_vcf %>%
+  select(10:ncol(.)) %>%  # Select from column 10 to the last column
+  unlist() %>%  # Convert dataframe to vector
+  unique() %>% sort() 
+### [1] "./." "0|0" "0|1" "1|0" "1|1"
+### [1] "./." "0|0" "0|1" "0|2" "1|0" "1|1" "1|2" "2|0" "2|1" "2|2"  Total of 10 types
+
+# Get unique values per row starting from column 10
+unique_counts_per_row <- df_vcf %>%
+  select(10:ncol(.)) %>%  # Select from column 10 to the last column
+  apply(1, function(x) length(unique(x))) # Apply unique by row, return number of unique values per row
+
+### Convert genotypes
+df_vcf2_hgdp <- df_vcf %>% 
+  pivot_longer(cols = c(10:last_col()), names_to = "sample", values_to = "Geno_ori", values_drop_na = TRUE) %>% 
+  mutate(Geno = case_when(
+    Geno_ori == "./." ~ -1,
+    Geno_ori == "0|0" ~ 0,
+    Geno_ori == "0|1" | Geno_ori == "1|0" ~ 1,
+    Geno_ori == "1|1" ~ 2,
+    TRUE ~ NA_real_
+  )) %>% 
+  dplyr::select(-Geno_ori) %>% 
+  pivot_wider(names_from = sample, values_from = Geno)
+
+### =====================================
+
+###########################
+### Get global sample names
+###########################
+
+# Read all lines of the file
+lines <- read_lines(vcf_file2)
+# Count the number of lines starting with "##"
+skip_lines <- sum(substr(lines, 1, 2) == "##")
+# Use read_tsv to skip these lines
+df_vcf <- read_tsv(vcf_file2, skip = skip_lines) %>% 
+  filter(str_length(REF) == 1, str_length(ALT) == 1)
+
+# View data
+head(df_vcf)
+
+# Get column names from column 10 to the last column
+column_names <- colnames(df_vcf)[10:ncol(df_vcf)]
+
+# Convert column names to dataframe, one column name per row
+df_columns <- tibble(sample = column_names)
+
+### Get unique values starting from column 10, from 0 to 33, a total of 34 haplotypes
+unique_values <- df_vcf %>%
+  select(10:ncol(.)) %>%  # Select from column 10 to the last column
+  unlist() %>%  # Convert dataframe to vector
+  unique() %>% sort() 
+### [1] "0|0" "0|1" "1|0" "1|1"
+### [1] "./." "0|0" "0|1" "1|0" "1|1"
+### [1] "./." "0|0" "0|1" "0|2" "1|0" "1|1" "1|2" "2|0" "2|1" "2|2"  Total of 10 types
+
+# Get unique values per row starting from column 10
+unique_counts_per_row <- df_vcf %>%
+  select(10:ncol(.)) %>%  # Select from column 10 to the last column
+  apply(1, function(x) length(unique(x))) # Apply unique by row, return number of unique values per row
+
+### Convert genotypes
+df_vcf2_1kgp <- df_vcf %>% 
+  pivot_longer(cols = c(10:last_col()), names_to = "sample", values_to = "Geno_ori", values_drop_na = TRUE) %>% 
+  mutate(Geno = case_when(
+    Geno_ori == "./." ~ -1,
+    Geno_ori == "0|0" ~ 0,
+    Geno_ori == "0|1" | Geno_ori == "1|0" ~ 1,
+    Geno_ori == "1|1" ~ 2,
+    TRUE ~ NA_real_
+  )) %>% 
+  dplyr::select(-Geno_ori) %>% 
+  pivot_wider(names_from = sample, values_from = Geno)
+
+
+```
+
+## plot world map
+```{r}
+library(conflicted)
+library(dplyr)
+library(readxl)
+library(tidyverse)
+library(scatterpie)
+
+target_genes <- c("PRKCH")
+dfveppp <-  read_excel("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/007_vepAnnotation/003/PRKCH_N5782.xlsx")
+dfpara_intro <- readxl::read_xlsx("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/008_validateBy1KGP/001_introgressionSites_2calSelection.xlsx",sheet = "Merge")
+
+target_genes <- c("PRDM16")
+dfveppp <-  read_excel("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/007_vepAnnotation/003/PRDM16_N12.xlsx")
+dfpara_intro <- readxl::read_xlsx("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/008_validateBy1KGP/001_introgressionSites_2calSelection.xlsx",sheet = "Merge")
+
+target_genes <- c("CSGALNACT2")
+dfveppp <-  read_excel("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/007_vepAnnotation/003/CSGALNACT2_CH25H.xlsx")
+dfpara_intro <- readxl::read_xlsx("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/008_validateBy1KGP/001_introgressionSites_2calSelection.xlsx",sheet = "Merge")
+
+target_genes <- c("CH25H")
+dfveppp <-  read_excel("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/007_vepAnnotation/003/CSGALNACT2_CH25H.xlsx")
+dfpara_intro <- readxl::read_xlsx("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/008_validateBy1KGP/001_introgressionSites_2calSelection.xlsx",sheet = "Merge")
+
+df_target <- dfpara_intro %>% 
+  filter(GeneName %in% target_genes) %>% 
+  # filter(POS_HG38 == 3320163) %>% 
+  # filter(POS_HG38 == 43120877) %>%
+  # filter(POS_HG38 == 2974512) %>% 
+  ### PRDM16
+  # filter(POS_HG38 == 3320163) %>%
+  ### PRKCH
+  # filter(POS_HG38 == 61470865) %>% 
+  # filter(POS_HG38 == 61457521) %>% 
+  ### CSGALNACT
+  # filter(POS_HG38 == 43194405) %>%  
+  # filter(POS_HG38 == 43191104) %>% 
+  # filter(POS_HG38 == 43201544) %>% 
+  
+  ### CH25H
+  filter(POS_HG38 == 89207336) %>%
+  distinct(POS_HG38,.keep_all = T)
+
+dfpara0 <- df_target
+
+for(i in 1:nrow(dfpara0)) {
+  geneName0 <- dfpara0$GeneName[i]
+  BlockID <- dfpara0$ChunkID[i]
+  pos_selected <- dfpara0$POS_HG38[i]
+  
+  REF_chm13 <- dfveppp %>% filter(POS_HG38 == pos_selected) %>% 
+    distinct(POS_HG38, .keep_all = TRUE) %>% dplyr::select(REF) %>% pull()
+  REF_hg38 <- dfveppp %>% filter(POS_HG38 == pos_selected) %>% 
+    distinct(POS_HG38, .keep_all = TRUE) %>% dplyr::select(Uploaded_variation) %>% pull() 
+  REF_hg38 <- str_sub(str_split_fixed(REF_hg38, "_", 3)[,3], 1, 1) 
+  
+  
+  Existing_variation <- dfveppp %>% filter(POS_HG38 == pos_selected) %>% 
+    distinct(POS_HG38, .keep_all = TRUE) %>% dplyr::select(Existing_variation) %>% pull()
+  
+  Uploaded_variation <- dfveppp %>% filter(POS_HG38 == pos_selected) %>% 
+    distinct(POS_HG38, .keep_all = TRUE) %>% dplyr::select(Uploaded_variation) %>% pull()
+  
+  geneName <- str_c(geneName0, "_", str_replace_all(Uploaded_variation, "/", "_"), "_", Existing_variation)
+  
+  ################## para2: input & output
+  plotPath <- fs::path("/Users/Aoyue/Documents/", 
+                       str_c("Map_hgdp_1kgp_", geneName, "_", BlockID, "_posHG38_", pos_selected, "_alleleFreDistribution.pdf"))
+  ##################
+  
+  
+  ##################
+  ### Uniformly process population information and latitude/longitude information
+  ##################
+  df_hm_Anc <- tibble(region = c("EAST_ASIA","CENTRAL_SOUTH_ASIA","MIDDLE_EAST","EUROPE","AMERICA","AFRICA","OCEANIA"),
+                      Anc = c("EAS","CSA","MEA","EUR","AMR","AFR","OCE"))
+  
+  dfpop_hgdp <- read_tsv("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/008_validateBy1KGP/002_vcf/hgdp_wgs.20190516.metadata.txt") %>% 
+    left_join(df_hm_Anc, by=c("region")) %>% 
+    dplyr::select(sample, Pop = population, Anc, Lat = latitude, Long = longitude)
+  
+  df_location0 <- read_tsv("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/000_popInfo/modify/001_location.txt")
+  
+  dfpop_1kgp <- read_tsv("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/005_ibdmix/002_popInfo/000_source/1KG/integrated_call_samples_v3.20130502.ALL.panel.txt") %>% 
+    left_join(df_location0, by=c("pop" = "Pop")) %>%
+    dplyr::select(sample, Pop = pop, Anc = super_pop, Lat, Long)
+  
+  dfpop <- bind_rows(dfpop_hgdp, dfpop_1kgp)
+  
+  ifsplitSEA_EAS <- TRUE
+  ### Switch: If you want to split SEA and EAS for 1kgp+hgdp, implement at this step
+  if(ifsplitSEA_EAS){
+    dfpop2 <- dfpop %>% 
+      mutate(Anc = if_else(Pop %in% c("KHV","Cambodian"), "SEA", Anc))
+    
+    dfpop <- dfpop2 
+    ### Also note, need to modify one line of code in the next step
+  }
+  
+  df_location <- dfpop %>%  distinct(Pop, Anc, Lat, Long)
+  
+  ##################
+  ### Prepare data and merge
+  ##################
+  df_vcf3_hgdp <- df_vcf2_hgdp %>%
+    ## POS_HG38
+    filter(POS == pos_selected) %>% 
+    pivot_longer(cols = c(10:last_col()), names_to = "sample", values_to = "Geno") %>% 
+    # mutate(HapGroup = if_else(Geno > 0, "Introgressed", "Nonintrogressed")) %>% 
+    filter(Geno != -1) 
+  
+  df_vcf3_1kgp <- df_vcf2_1kgp %>%
+    ## POS_HG38
+    filter(POS == pos_selected) %>% 
+    pivot_longer(cols = c(10:last_col()), names_to = "sample", values_to = "Geno") %>% 
+    # mutate(HapGroup = if_else(Geno > 0, "Introgressed", "Nonintrogressed")) %>% 
+    filter(Geno != -1) %>% 
+    mutate(`#CHROM` = str_c("chr", `#CHROM`))
+  
+  df_vcf3 <- bind_rows(df_vcf3_hgdp, df_vcf3_1kgp) %>% 
+    left_join(dfpop, by=c("sample")) %>% 
+    ### Some individuals in the VCF file are redundant and lack population information; delete these individuals
+    filter(!is.na(Pop)) 
+  
+  
+  ### If you want to merge certain populations, implement at this step
+  if(FALSE){
+    df_vcf4 <- df_vcf3 %>% 
+      mutate(Pop = if_else(Pop == "Colombian", "CLM", Pop)) %>% 
+      mutate(Pop = if_else(Pop == "Yoruba", "YRI", Pop)) %>% 
+      mutate(Pop = if_else(Pop == "Dai", "CDX", Pop)) %>%  
+      mutate(Pop = if_else(Pop == "Japanese", "JPT", Pop)) 
+    
+    df_vcf3 <- df_vcf4  
+  }
+  
+  
+  ################################################################################
+  ##################
+  ### Start calculating frequencies and other information to prepare for plotting
+  ##################
+  df_pie <- df_vcf3 %>% 
+    group_by(Pop) %>% 
+    mutate(n_pop = n()) %>% 
+    ungroup() %>% 
+    ### Start statistics
+    group_by(Anc, Pop, n_pop) %>% 
+    # dplyr::count(HapGroup) %>% 
+    ### 
+    summarise(sum_geno = sum(Geno), n = n(), fre = sum_geno/2/n) %>% 
+    mutate(fre2 = 1-fre) %>% 
+    arrange(-fre) %>% 
+    ungroup() %>% 
+    ### Latitude and longitude information is actually used at this step
+    left_join(df_location, by=c("Pop", "Anc")) %>% 
+    dplyr::rename(Introgressed = fre, Nonintrogressed = fre2)
+  
+  
+  if(REF_chm13 != REF_hg38){
+    df_pie <- df_pie %>% 
+      mutate(Introgressed1 = Nonintrogressed) %>% 
+      mutate(Nonintrogressed1 = Introgressed) %>% 
+      mutate(Introgressed = Introgressed1) %>% 
+      mutate(Nonintrogressed = Nonintrogressed1) %>% 
+      dplyr::select(-Introgressed1, -Nonintrogressed1)
+  }
+  
+  write_tsv(df_pie %>% arrange(-Introgressed) %>% 
+              mutate(across(where(is.numeric), 
+                            ~ trimws(format(signif(.x, 3), scientific = FALSE)))),
+            str_c("~/Documents/HGDP+1KGP_", geneName, "_", BlockID, "_posHG38_", pos_selected, "_alleleFre_byPop.txt"))
+  
+  ### Anc statistics in long format for pie charts below
+  df_pie_anc <- df_vcf3 %>% 
+    group_by(Anc) %>% 
+    mutate(n_pop = n()) %>% 
+    ungroup() %>% 
+    ### Start statistics
+    group_by(Anc, n_pop) %>% 
+    # dplyr::count(HapGroup) %>% 
+    summarise(sum_geno = sum(Geno), n = n(), fre = sum_geno/2/n) %>% 
+    mutate(fre2 = 1-fre) %>% 
+    arrange(-fre) %>% 
+    ungroup() %>% 
+    dplyr::rename(Introgressed = fre, Nonintrogressed = fre2) %>% 
+    pivot_longer(cols = c(Introgressed, Nonintrogressed), names_to = "HapGroup", values_to = "fre") 
+  
+  if(REF_chm13 != REF_hg38){
+    df_pie_anc <- df_pie_anc %>% 
+      pivot_wider(names_from = HapGroup, values_from = fre) %>% 
+      mutate(Introgressed1 = Nonintrogressed) %>% 
+      mutate(Nonintrogressed1 = Introgressed) %>% 
+      mutate(Introgressed = Introgressed1) %>% 
+      mutate(Nonintrogressed = Nonintrogressed1) %>% 
+      dplyr::select(-Introgressed1, -Nonintrogressed1) %>% 
+      pivot_longer(cols = c(Introgressed, Nonintrogressed), names_to = "HapGroup", values_to = "fre")
+  }
+  
+  # df_pie_anc$Anc <- factor(df_pie_anc$Anc, levels = c("EAS","SAS","CSA","MEA","EUR","AMR","OCE","AFR"))
+  
+  if(ifsplitSEA_EAS){
+    
+    if(length(unique(df_pie_anc$Anc)) == 9){
+      levelAnc <- c("EAS","SEA","SAS","CSA","MEA","EUR","AMR","OCE","AFR")
+      
+      df_pie_anc_label <- df_pie_anc %>% distinct(Anc, .keep_all = TRUE) %>% arrange(factor(Anc, levels = levelAnc)) %>% 
+        mutate(label = str_c(Anc, "\n", "(n = ", n_pop, ")"))
+      
+      labelAnc <- df_pie_anc_label$label
+      
+      df_pie_anc$Anc <- factor(df_pie_anc$Anc, levels = levelAnc, labels = labelAnc)
+    } else {
+      levelAnc <- c("EAS","SEA","SAS","CSA","MEA","EUR","AMR","OCE","AFR")
+      df_pie_anc$Anc <- factor(df_pie_anc$Anc, levels = levelAnc)
+    }
+    
+
+    
+  } else {
+    df_pie_anc$Anc <- factor(df_pie_anc$Anc, levels = c("EAS","SAS","CSA","MEA","EUR","AMR","OCE","AFR"),
+                             labels = )  
+  }
+  
+  write_tsv(df_pie_anc %>% arrange(HapGroup, -fre) %>% 
+              mutate(across(where(is.numeric), 
+                            ~ trimws(format(signif(.x, 3), scientific = FALSE)))),
+            str_c("~/Documents/HGDP+1KGP_", geneName, "_", BlockID, "_posHG38_", pos_selected, "_alleleFre_byAnc.txt"))
+  
+  ################################################################################
+  
+  
+  ### 1. Calculate the proportion of AffinityDen in each Anc group (data needed for pie charts)
+  pie_data <- df_pie
+  
+  ################################################################################
+  pie_data <- pie_data %>%
+    mutate(Group_n_pop = case_when(
+      n_pop >= 1 & n_pop <= 5 ~ "n=1-5",
+      n_pop >= 6 & n_pop <= 10 ~ "n=6-10",
+      n_pop >= 11 & n_pop <= 24 ~ "n=11-19",
+      n_pop >= 25 ~ "n≥20",
+      TRUE ~ "Other"  # Handle values that may fall outside the range
+    )) %>%
+    # Convert grouping to factor to ensure order
+    mutate(Group_n_pop = factor(Group_n_pop, 
+                                levels = c("n=1-5", "n=6-10", "n=11-19", "n≥20")))
+  
+  # 2. Create pie size mapping
+  # size_mapping <- c("n=1-5" = 0.5, "n=6-10" = 1.0, "n=11-15" = 1.5, "n=16-40" = 2.0)
+  baseSize = 3
+  size_mapping <- c("n=1-5" = baseSize, "n=6-10" = baseSize + 0.3, "n=11-19" = baseSize + 0.6, "n≥20" = baseSize + 1)
+  
+  # Add corresponding size for each point
+  pie_data <- pie_data %>%
+    mutate(pie_size = size_mapping[Group_n_pop])
+  
+  ################################################################################ Base plot
+  ### 3. Draw map and pie charts
+  ### World map extent
+  latmin <- -55
+  latmax <- 80
+  ## Originally 80
+  longmin <- -180
+  longmax <- 180
+  
+  ### East and Southeast Asia map extent
+  latmin2 <- 5
+  latmax2 <- 51
+  ## Originally 80
+  longmin2 <- 65
+  longmax2 <- 145
+  
+  
+  base_map <- ggplot() +
+    borders("world", 
+            xlim = c(longmin, longmax),  # Longitude range
+            ylim = c(latmin, latmax),  # Latitude range
+            # fill = "#dedfe0"
+            # colour = "gray90", 
+            colour = "gray94", 
+            size = 0.05,
+            # fill = "gray92",
+            # fill = "gray94",
+            fill = "#F5F5F5"
+            ) +
+    theme_void() +
+    scale_y_continuous(breaks = seq(latmin, latmax, by = 10))+
+    ### Force equal ratio for x and y axes (1:1)
+    coord_equal(xlim = c(longmin, longmax), ylim = c(latmin, latmax))
+  # coord_cartesian(xlim = c(longmin, longmax), ylim = c(latmin, latmax))
+  
+  base_map
+  
+  ######################################################################################################### Frequency distribution
+  # Add pie chart layer
+  library(ggrepel)
+  library(cowplot)
+  final_map <- base_map +
+    # Key modification: use correct pie data
+    geom_scatterpie(
+      data = pie_data,
+      aes(x = Long, y = Lat, r = pie_size), # Radius fixed at 1.5 degrees
+      cols = c("Introgressed", "Nonintrogressed"), # Must explicitly specify column names
+      # alpha = 0.75,
+      alpha = 0.85,
+      size = 0.1,
+      color = "black"
+    ) +
+    # scale_fill_manual(values = c("#9AD0C2", "#2D9596", "#265073")) +
+    # scale_fill_manual(values = c("#c7e9b4", "#2D9596", "#265073")) +
+    scale_fill_manual(values = c("red", "white"),
+                      # values = c("red","#B0C4DE"),
+                      # values = c("red","#0047AB"),
+                      # values = c("red","darkblue"),
+                      labels = c("Archaic allele", "Non-archaic allele"),
+                      name = "") +
+    labs(title = geneName) +
+    guides(
+      fill = guide_legend(
+        direction = "horizontal",  # Horizontal arrangement
+        keywidth = unit(0.3, "cm"),  # Legend key width
+        keyheight = unit(0.3, "cm"), # Legend key height
+        label.position = "right",   # Label position to the right of marker
+        title.position = "top",      # Title above markers
+        nrow = 1                     # Force single row arrangement
+      )
+    )+
+    theme(plot.title = element_text(hjust = 0.5, margin = margin(b=3)),
+          # legend.position = "bottom",
+          legend.position = c(0.5, 0.15),
+          legend.key.size = unit(0.4, "cm"),  # Reduce legend marker size
+          # legend.margin = margin(t = -10),     # Adjust distance between legend and bottom edge
+          plot.subtitle = element_text(hjust = 0.5))
+  
+  # Save map
+  ggsave(plotPath, plot = final_map, width = 8, height = 5)
+  # ggsave(str_replace(plotPath, "pdf", "png"), plot = final_map, width = 8, height = 5)
+  
+  # Display map
+  print(final_map)
+  
+  ######################################################################################### Manually create legend
+  ### Manually create legend
+  # baseSize = 2
+  # size_mapping <- c("n=1-5" = baseSize, "n=6-10" = baseSize + 0.2, "n=11-15" = baseSize + 0.4, "n≥20" = baseSize + 0.6)
+  
+  # Convert to tibble and sort by value in ascending order
+  df_legend <- size_mapping %>% 
+    enframe(name = "Sample_Size", value = "Size") %>% 
+    arrange(Size)  # Sort by Size in ascending order
+  
+  # Draw legend: Use circle size to represent Size, display in sorted order
+  p_legend <- df_legend %>% 
+    ggplot(aes(x = 1, y = Sample_Size, size = Size)) +  # x fixed at 1, y uses categorical variable
+    geom_point(
+      color = "grey80",    # Circle border color
+      fill = "grey80",    # Circle fill color
+      # shape = 21,         # Circle with border
+      # stroke = 0.7        # Border thickness
+    ) +
+    # Set size mapping range to ensure consistency with actual values
+    scale_size_identity(
+      breaks = df_legend$Size,           # Legend breaks use actual Size values
+      labels = df_legend$Sample_Size,    # Legend labels use sample size ranges
+      name = "Sample Size Range",        # Legend title
+      guide = guide_legend(
+        override.aes = list(size = df_legend$Size * 1),  # Magnify 3 times (example value, can be adjusted)
+        key.height = unit(0.01, "cm")  # Core 2: Reduce distance between circles (default ~0.5cm, smaller values give smaller spacing)
+      )  ) +
+    # Hide x-axis, keep only y-axis categorical labels
+    theme(
+      axis.title = element_blank(),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      panel.grid = element_blank(),
+      panel.background = element_blank()
+    ) +
+    # Adjust y-axis order (consistent with data sorting)
+    scale_y_discrete(limits = df_legend$Sample_Size)
+  
+  print(p_legend)
+  library("ggpubr")
+  ggp_legend <- cowplot::get_legend(p_legend)
+  ggsave(as_ggplot(ggp_legend), filename = "~/Documents/legend.pdf", height = 3, width = 2, bg="transparent")
+  
+  
+  ################################################################################ Overlay legend
+  ## Use cowplot package to overlay legend
+  final_map_with_legend <- ggdraw() +
+    draw_plot(final_map) +
+    draw_plot(
+      ggp_legend,
+      x = 0.05,    # Bottom-left x position (0-1 range, 0.05 = 5% from left)
+      y = 0.23,    # Bottom-left y position (0-1 range, 0.05 = 5% from bottom)
+      width = 0.2, # Legend width
+      height = 0.2 # Legend height
+    )
+  
+  # Save map with legend
+  # ggsave(str_replace(plotPath, ".pdf", "_withSizeLegend.pdf"), plot = final_map_with_legend, width = 8, height = 5)
+  # ggsave(str_replace(plotPath, ".pdf", "_withSizeLegend.png"), plot = final_map_with_legend, width = 8, height = 5)
+  # Display map
+  print(final_map_with_legend)
+  ################################################################################ Second plot: Draw ANC pie chart
+  ### 1. Calculate the proportion of AffinityDen in each Anc group (data needed for pie charts)
+  
+  # Create pie chart
+  p_ancPie <- ggplot(df_pie_anc, aes(x = "", y = fre, fill = HapGroup)) +
+    # geom_bar(stat = "identity", width = 1, color = "white") +
+    geom_bar(stat = "identity", width = 0.3, color = "transparent") +
+    coord_polar("y", start = 0) +
+    # scale_fill_manual(values = c("red","darkblue")) +
+    # scale_fill_manual(values = c("red","#0047AB")) +
+    scale_fill_manual(values = c("red", "gray80")) +
+    facet_wrap(~ Anc, nrow = 1) +
+    labs(
+      # title = "CSGALNACT2 gene introgression frequency by ancestral group",
+      # subtitle = "Colored portion shows introgression frequency, gray shows no introgression",
+      fill = "Introgression Status"
+    ) +
+    theme_void() +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "plain", size = 9),
+      plot.subtitle = element_text(hjust = 0.5, size = 10),
+      legend.position = "none",
+      strip.text = element_text(face = "plain", size = 9)  # Region label style
+    )
+  
+  print(p_ancPie)
+  # Output to PDF
+  ggsave(str_replace(plotPath, ".pdf", "_ancPie.pdf"), p_ancPie, width = 6, height = 4, bg="transparent")
+  
+}
+
+
+```

@@ -1,0 +1,217 @@
+---
+title: "Data analysis"
+author: "Aoyue Bi"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float:
+      toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: simplex 
+    highlight: haddock 
+---
+
+
+## =================
+## PRDM16 dimension and frequency correlation analysis
+## =================
+
+## S1:Correlation between all functional sites and latitude
+chm13: PRDM16	chr1	2571244	2943423	372180
+hg38: PRDM16 chr1:3069168-3438621 (length: 369,453)
+
+
+```{r}
+library(readxl)
+library(tidyverse)
+library(ggpubr)
+library(scales)
+
+inputDir <- "/Users/Aoyue/project_pos/APG_archaicDNA/003_result/adaptiveIntrogressionAllele_byAoyue_2025-12-31/PRDM16/1KGP_HGDP"
+
+df0 <- read_xlsx("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/007_vepAnnotation/003/PRDM16_N12.xlsx") 
+
+target_genes <- c("PRDM16")
+dfveppp <-  read_excel("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/007_vepAnnotation/003/PRDM16_N12.xlsx")
+# dfpara_intro <- readxl::read_xlsx("/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/008_validateBy1KGP/001_introgressionSites_2calSelection.xlsx",sheet = "Merge")
+
+### 3890694 3890886
+df1 <- df0 %>% 
+  dplyr::rename(Chr = `#CHROM`) %>% 
+  filter(Consequence %in% c("regulatory_region_variant","TF_binding_site_variant")) %>% 
+  # filter(Consequence %in% c("missense_variant") ) %>% 
+  distinct(Chr, POS, REF, ALT, POS_HG38, NeanAltai, GeneName, BlockID,Uploaded_variation,.keep_all = T)
+
+df_target <- df1 %>% 
+  # filter(POS_HG38 ==  3320163) %>% 
+  mutate(a=1)
+
+
+############ 
+outfile_combine <- "/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/008_validateBy1KGP/004_Lat_VS_frequency/001_PRDM16_pos_correlationStatistic.txt"
+df_combined <- tibble()
+
+dfpara0 <- df_target
+
+for(i in 1:nrow(dfpara0)){
+  geneName0 <- dfpara0$GeneName[i]
+  BlockID <- dfpara0$BlockID[i]
+  pos_selected <- dfpara0$POS_HG38[i]
+  
+  Existing_variation <- dfveppp %>% filter(POS_HG38 == pos_selected) %>% 
+    distinct(POS_HG38, .keep_all = TRUE) %>% dplyr::select(Existing_variation) %>% pull()
+  
+  Uploaded_variation <- dfveppp %>% filter(POS_HG38 == pos_selected) %>% 
+    distinct(POS_HG38, .keep_all = TRUE) %>% dplyr::select(Uploaded_variation) %>% pull()
+  
+  geneName <- str_c(geneName0, "_", str_replace_all(Uploaded_variation, "/", "_"), "_", Existing_variation)
+  
+  ################## para2: input & output
+  plotPath <- fs::path("/Users/Aoyue/Documents/", 
+                       str_c("Correlation_hgdp_1kgp_", geneName, "_", BlockID, "_posHG38_", pos_selected, ".pdf"))
+  ##################
+  
+  inDir <- "/Users/Aoyue/project_pos/APG_archaicDNA/003_result/adaptiveIntrogressionAllele_byAoyue_2025-12-31/PRDM16/1KGP_HGDP"
+  infile <- file.path(inDir, str_c("HGDP+1KGP_", geneName, "_", BlockID, "_posHG38_", pos_selected, "_alleleFre_byPop.txt")) 
+  
+  df3 <- read_tsv(infile)
+  
+  df4 <- df3 %>% 
+    filter(Long > 95 & Lat > 5) %>% 
+    filter(Pop != "Han")
+  
+  # Calculate correlation
+cor_test <- cor.test(df4$Introgressed, df4$Lat, method = "pearson")
+cor_coef <- round(cor_test$estimate, 3)
+p_value <- ifelse(cor_test$p.value < 0.001, "< 0.001", 
+                 sprintf("%.3f", cor_test$p.value))
+
+### Record correlation coefficient and p-value, output to table
+dfs <- tibble(Uploaded_variation = Uploaded_variation, Cor_coef = cor_coef, P_value = p_value)
+df_combined <- bind_rows(df_combined, dfs)
+
+# Create custom theme
+theme_custom <- function(base_size = 12) {
+  theme_minimal(base_size = base_size) +
+    theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5,
+                                margin = margin(b = 15)),
+      plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray40"),
+      axis.title = element_text(size = 13, face = "plain"),
+      axis.text = element_text(size = 11),
+      legend.position = "top",
+      legend.title = element_text(size = 12),
+      legend.text = element_text(size = 11),
+      panel.grid.minor = element_blank(),
+      panel.grid.major = element_line(color = "gray90", linewidth = 0.3),
+      panel.background = element_rect(fill = "white", color = NA),
+      plot.background = element_rect(fill = "white", color = NA),
+      plot.margin = margin(20, 20, 20, 20)
+    )
+}
+
+# Create aesthetically pleasing color scheme
+color_palette <- c(
+  "EAS" = "#2E8B57",  # Sea green
+  "SEA" = "#4682B4",  # Steel blue
+  "SAS" = "#D2691E",  # Chocolate
+  "EUR" = "#9370DB",  # Medium purple
+  "AFR" = "#DC143C"   # Crimson
+)
+
+# Create plot
+p <- ggplot(df4, aes(x = Introgressed, y = Lat, color = Anc)) +
+  # Confidence interval
+  geom_smooth(aes(group = 1), method = "lm", 
+              formula = y ~ x, 
+              se = TRUE, 
+              color = "#4A708B",  # Steel blue
+              fill = "#87CEEB",   # Light sky blue
+              alpha = 0.2,
+              linewidth = 0.8,
+              linetype = "solid") +
+  
+  # Scatter points
+  geom_point(size = 4, alpha = 0.8, shape = 19) +
+  
+  # Regression line
+  geom_smooth(aes(group = 1), method = "lm", 
+              formula = y ~ x, 
+              se = FALSE, 
+              color = "#2F4F4F",  # Dark slate gray
+              linewidth = 1.2,
+              linetype = "solid") +
+  
+  # Add text labels (Pop names)
+  geom_text(aes(label = Pop), 
+            size = 3.5, 
+            color = "black",
+            fontface = "bold",
+            hjust = 0, vjust = 0, 
+            nudge_x = 0.005, nudge_y = 0.3,
+            check_overlap = FALSE) +
+  
+  # Add correlation statistic label
+  annotate("text",
+           x = min(df4$Introgressed) + 0.02,
+           y = max(df4$Lat) - 2,
+           label = paste0("R = ", cor_coef, "\n", 
+                         "P ", p_value),
+           size = 5,
+           color = "#2F4F4F",
+           fontface = "bold",
+           hjust = 0,
+           lineheight = 0.9) +
+  
+  # Colors, axes, and labels
+  scale_color_manual(values = color_palette,
+                     name = "Ancestry group") +
+  scale_x_continuous(limits = c(min(df4$Introgressed) - 0.02, 
+                               max(df4$Introgressed) + 0.05),
+                     breaks = pretty_breaks(n = 6),
+                     labels = percent_format(accuracy = 1)) +
+  scale_y_continuous(limits = c(min(df4$Lat) - 2, max(df4$Lat) + 2),
+                     breaks = pretty_breaks(n = 8)) +
+  
+  # Title and axis labels
+  labs(
+    title = geneName,
+    subtitle = paste("Analysis of", nrow(df4), "populations from different ancestry groups"),
+    x = "Frequency of introgressed sites",
+    y = "Latitude (°N)",
+    caption = paste("Data source:", 
+                   paste(unique(df4$Anc), collapse = ", "),
+                   "ancestry groups | n =", nrow(df4), "populations")
+  ) +
+  
+  # Apply custom theme
+  theme_custom() +
+  
+  # Add gridline aesthetics
+  theme(
+    panel.grid.major = element_line(color = "gray92", linewidth = 0.4),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(color = "gray40", linewidth = 0.5)
+  )
+
+# Display plot
+print(p)
+
+ggsave(plotPath, plot = p, width = 8, height = 6)
+
+} ### End of loop
+
+### Output calculated parameter file
+### write_tsv(df_combined, outfile_combine)
+
+#### Add generated correlation file to original table
+df_combined2 <- df1 %>% 
+  left_join(df_combined, by=c("Uploaded_variation"))
+
+### write_tsv(df_combined2, "/Users/Aoyue/project_pos/APG_archaicDNA/002_dataAnalysis/011_adaptiveIntrogression/008_validateBy1KGP/004_Lat_VS_frequency/001_PRDM16_pos_correlationStatistic2.txt")
+
+
+
+```

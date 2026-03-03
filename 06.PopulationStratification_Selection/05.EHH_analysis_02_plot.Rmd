@@ -1,0 +1,54 @@
+---
+title: "Data analysis"
+author: "Lei Nie"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float:
+      toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: simplex 
+    highlight: haddock 
+---
+
+## EHH plot
+
+```{r}
+library(rehh)
+require("argparse")
+
+parser <- ArgumentParser()
+#parser$add_argument("-c", "--chr", help = "p")
+#parser$add_argument("-p", "--pos", help = "point")
+parser$add_argument("-mk", "--marker", help = "marker")
+args <- parser$parse_args()
+
+#chrom <- args$chr
+mk <- args$marker
+mk
+#chrom <- "chr2"
+#p <- 212672068
+#mk <- paste(chrom, p, sep="_")
+#mk <- ">18408685>18408682"
+
+hh_vcf <- data2haplohh(hap_file = "ehh.vcf.gz",
+                       vcf_reader = "data.table",
+                       verbose = FALSE,
+                       min_perc_geno.mrk=95,
+                       polarize_vcf = FALSE)
+#hh_vcf                       
+#plot(hh_vcf)
+#haplo(hh_vcf)
+res <- calc_ehh(hh_vcf, mrk=mk, include_nhaplo = TRUE)
+#print(res)
+plot(res)
+
+```
+
+
+
+
+
+
