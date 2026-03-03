@@ -1,0 +1,2 @@
+Pop	Num	BIC	BIC_diff	LRT_p_value	LRT_p_value_formatted
+HG02106_hap2	72	-43.767017068486474	NA	NA	NA

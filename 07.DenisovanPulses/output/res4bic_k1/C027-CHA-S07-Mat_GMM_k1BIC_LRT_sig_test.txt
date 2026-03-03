@@ -1,0 +1,2 @@
+Pop	Num	BIC	BIC_diff	LRT_p_value	LRT_p_value_formatted
+C027-CHA-S07-Mat	47	-18.980101319389625	NA	NA	NA

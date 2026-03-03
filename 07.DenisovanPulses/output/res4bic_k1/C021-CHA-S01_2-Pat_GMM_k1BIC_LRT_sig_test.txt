@@ -1,0 +1,2 @@
+Pop	Num	BIC	BIC_diff	LRT_p_value	LRT_p_value_formatted
+C021-CHA-S01_2-Pat	68	-38.08556193466606	NA	NA	NA

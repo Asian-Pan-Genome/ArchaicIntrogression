@@ -1,0 +1,7 @@
+Pop	Num_seg	K	Component	mu	sigma	lambda
+HG02106_hap2	72	1	Group1	0.537	0.169	1
+HG02106_hap2	72	2	Group1	0.456	0.087	0.764
+HG02106_hap2	72	2	Group2	0.798	0.078	0.236
+HG02106_hap2	72	3	Group1	0.339	0.011	0.134
+HG02106_hap2	72	3	Group2	0.479	0.073	0.621
+HG02106_hap2	72	3	Group3	0.792	0.082	0.245

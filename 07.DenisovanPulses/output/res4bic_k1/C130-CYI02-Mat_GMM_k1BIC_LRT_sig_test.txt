@@ -1,0 +1,2 @@
+Pop	Num	BIC	BIC_diff	LRT_p_value	LRT_p_value_formatted
+C130-CYI02-Mat	72	-29.12682283049454	NA	NA	NA

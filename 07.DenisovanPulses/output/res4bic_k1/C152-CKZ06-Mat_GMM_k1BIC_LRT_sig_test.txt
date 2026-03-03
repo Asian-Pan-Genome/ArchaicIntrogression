@@ -1,0 +1,2 @@
+Pop	Num	BIC	BIC_diff	LRT_p_value	LRT_p_value_formatted
+C152-CKZ06-Mat	47	-25.129544386175603	NA	NA	NA

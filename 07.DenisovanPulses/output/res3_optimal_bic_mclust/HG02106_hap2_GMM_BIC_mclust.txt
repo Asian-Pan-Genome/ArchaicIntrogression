@@ -1,0 +1,2 @@
+Pop	k_optimal_mclust
+HG02106_hap2	2

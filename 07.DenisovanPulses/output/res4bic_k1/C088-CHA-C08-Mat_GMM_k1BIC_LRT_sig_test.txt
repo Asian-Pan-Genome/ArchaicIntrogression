@@ -1,0 +1,2 @@
+Pop	Num	BIC	BIC_diff	LRT_p_value	LRT_p_value_formatted
+C088-CHA-C08-Mat	57	-40.56387665691211	NA	NA	NA
