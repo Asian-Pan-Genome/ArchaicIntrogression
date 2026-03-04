@@ -6,9 +6,9 @@ results: "$home/Den_1" # you should edit it here
 callsets:
  ARSB.dip:
   # Minigraph-Cactus VCF
-  vcf: "Den_1.vcf.gz"
+  vcf: "Den_1.vcf.gz" # edit 
   # Minigraph-Cactus graph GFA
-  gfa: "Den_1.gfa.gz"
+  gfa: "Den_1.gfa.gz" # edit
   # TSV file specifying sex (1=male, 2=female) of each sample in input VCF. Format: <sample-name> <sex>. 
   sample_info: "Samples.Sex.tsv" # you should edit it here
   # prefix used for chromosome names in FASTA file. 
