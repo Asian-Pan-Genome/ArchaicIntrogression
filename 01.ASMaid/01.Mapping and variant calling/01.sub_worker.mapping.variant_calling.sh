@@ -4,6 +4,7 @@
 #SBATCH --mem=100g
 #SBATCH -t 300:00:00
 
+## Sub worker for 01.main_pipeline.sh to handle mapping and variant calling
 # Parse arguments
 while [[ "$#" -gt 0 ]]; do
     case $1 in

@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Usage: bash 00_main_pipeline.sh <Assembly_Name> <Ref_Fasta_Path> <Project_Root_Dir> <Data_Root_Dir>
+
 # Description: Main entry point for the mapping pipeline (Optimized for Nature Publication).
 # It handles reference indexing, sample list generation, and SLURM job submission.
 

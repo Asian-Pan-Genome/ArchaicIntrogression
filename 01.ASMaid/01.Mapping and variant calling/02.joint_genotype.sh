@@ -1,4 +1,5 @@
 #!/bin/bash
+
 # Usage: bash 02_joint_genotype.sh <Assembly_Name> <Project_Root_Dir>
 
 ASSEMBLY=$1

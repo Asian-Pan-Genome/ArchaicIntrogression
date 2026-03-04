@@ -10,6 +10,13 @@ To ensure high-quality variant calls across different types of sequencing data:
 
 ## 02. Simulation analysis
 
+This module is dedicated to generating simulation data, validating the performance of our proposed method (**ASMaid**) and comparing it against state-of-the-art introgression detection tools (**IBDmix** and **Sprime**). 
+
+### Key Components:
+- **Demographic Simulation**: Utilizing `msprime` to simulate complex Out-of-Africa evolutionary scenarios, including Neanderthal-to-Human gene flow (archaic introgression).
+- **Cross-Tool Benchmarking**: A unified pipeline to process simulated data through multiple detection algorithms.
+- **Statistical Evaluation**: Robust calculation of Precision, Recall, F1-score, and False Positive Rate (FPR) by comparing inferred tracts with the simulation ground truth.
+
 ## 03. CN-based case analysis (_MGAM_ gene)
 
 ## Key Tools & Versions

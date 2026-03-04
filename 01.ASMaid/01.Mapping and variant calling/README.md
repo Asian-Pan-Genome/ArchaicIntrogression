@@ -29,10 +29,10 @@ If you prefer to provide your own sample list or wish to bypass the automatic sc
 
 
 ### Step 2: Mapping and Variant Calling
-Execute the main controller. It uses a chromosome list generated at `${CONFIG_DIR}/${ASSEMBLY}.chro_list.txt` (extracted from the reference `.fai`) to parallelize calling.
+Execute the main controller. It uses a chromosome list generated at `${CONFIG_DIR}/${ASSEMBLY}.chro_list.txt` (extracted from the reference `.fai`) to parallelize calling. When running the following command for `01.main_pipeline.sh`, the script will automatically sbatch the `01.sub_worker.mapping.variant_calling.sh` for each sample.
 ```bash
 # Usage: bash 00_main_pipeline.sh <Assembly_Name> <Ref_Fasta> <Project_Root> <Data_Root>
-bash 00_main_pipeline.sh C115-CMG02-Mat /share/home/project/zhanglab/APG/Freezev0.9/C115-CMG02/Mat/C115-CMG02_Mat.v0.9.fasta ./project_dir /path/to/DATA_ROOT
+bash 01.main_pipeline.sh C115-CMG02-Mat /share/home/project/zhanglab/APG/Freezev0.9/C115-CMG02/Mat/C115-CMG02_Mat.v0.9.fasta ./project_dir /path/to/DATA_ROOT
 ```
 
 ### Step 3: Cohort Merging (Joint Genotyping)
