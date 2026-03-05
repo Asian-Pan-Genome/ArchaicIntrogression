@@ -67,13 +67,13 @@ Then, you could concat all tables into archaic-level `$archaic.freq_test.tsv`.
 
 
 # Genotyping pAID-vars in Neanderthal and Denisovan genomes
-Here we defined the pAID-vars present in at least one Neanderthal or Denisovan genomes were highly-confident (HC). For small variants (pAID-SMVs, including SNVs and InDels), we could map archaic reads to the reference genome and use GATK to call variants, while for SVs, which are too difficult to accuartely calling, validation was performed by analyzing mapping coverage profiles and sequence clipping signals.
+Here, we defined the pAID-vars present in at least one Neanderthal or Denisovan genome as highly confident (HC). For small variants (pAID-SMVs, including SNVs and InDels), we could map archaic reads to the reference genome and use GATK to call variants, while for SVs, which are too difficult to accurately call, validation was performed by analyzing mapping coverage profiles and sequence clipping signals.
 
 ## Archaic reads mapping and variants calling
 `BWA-ALN`
 @mingyu
 
-This step would generate file `$archaic.vcf.gz` for downstream analysis.
+This step would generate the file `$archaic.vcf.gz` for downstream analysis.
 
 ## Validation for pAID-SNVs
 ```
@@ -81,7 +81,7 @@ python scripts/validation_pAID-SNVs.py $archaic.freq_test.tsv $archaic.vcf.gz > 
 ```
 
 ## Validation for pAID-InDels
-For the same indel variants, different callers and methods would generate inconsistent representations (similar to SVs). Here we useed `truvari bench` for comparision.
+For the same indel variants, different callers and methods would generate inconsistent representations (similar to SVs). Here we use `truvari bench` for comparison.
 ### Classifying pAID-InDels based on the allele frequency
 Since the reference genome may represent either a modern or an archaic allele at specific loci, we should employ different validation strategies. Therefore, here we classify them based on the allele frequency present in both introgressed and non-introgressed haplotypes, with the results from the script `pAID-vars_freq_test.py`.
 ```
@@ -89,7 +89,7 @@ python scripts/classify_pAID-InDels.py $archaic.freq_test.tsv $archaic.freq_test
 ```
 
 ### Comparing variant alleles using `truvari bench`
-For class A, where the reference represents a non-archaic allele, we first construct a `pseudo-vcf ($archaic.fix_gt.vcf.gz)` by fixing genotypes for archaic genome to `1/1` for all variant records. You could easily create one using `awk` or `sed`:
+For class A, where the reference represents a non-archaic allele, we first construct a `pseudo-vcf ($archaic.fix_gt.vcf.gz)` by fixing genotypes for the archaic genome to `1/1` for all variant records. You could easily create one using `awk` or `sed`:
 ```
 #CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  Nean-Altai
 chr1    12567   chr1_12567_C_A  C       A       415     .       AF=0.5;AQ=415;AN=6;AC=2 GT:DP:AD:GQ:PL:RNC      1/1:10:0,10:28:415,30,0:..
@@ -124,20 +124,23 @@ python scripts/validation_pAID-InDels.py $archaic.freq_test.tsv $archaic.freq_te
 
 ## Validation for pAID-SVs
 ### Archaic reads mapping
-While `BWA-ALN` could not generate clipping signals which are important for SVs identification, we additionally utilized `BWA-MEM` for archiaic reads mapping. 
+While `BWA-ALN` could not generate clipping signals, which are important for SVs identification, we additionally utilized `BWA-MEM` for archaic reads mapping. 
 @mingyu
 
 ### Validation
-First, collect mapping depth information from `$archaic.BWA-ALN.bam`. Before validation, please run `samtools depth` to get the whole-genome avarge depth `${archaic.BWA-ALN.depth}` for archaic genome.
+First, collect mapping depth information from `$archaic.BWA-ALN.bam`. Before validation, please run `samtools depth` to get the whole-genome average depth `${archaic.BWA-ALN.depth}` for the archaic genome.
 
-Then, validate pAID-SVs using only depth profile. 
+Then, validate pAID-SVs using only the depth profile. 
 ```
 python scripts/validation_pAID-SVs.BWA-ALN.py $archaic.freq_test.tsv $archaic.BWA-ALN.bam 500000 32 ${archaic.BWA-ALN.depth} $archaic.BWA-ALN # please specify your window size, here is 500Kb
 ```
 
+Next, validate pAID-SVs using both the depth profile and clipping signals. 
 
+_Due to the low coverage of the Vindija and Chagyrskaya genomes, only the Altai Neanderthal was utilized for depth-based assessments._
+```
+python scripts/validation_pAID-SVs.BWA-MEM.py $archaic.freq_test.tsv $archaic.BWA-MEM.bam 500000 32 ${archaic.BWA-ALN.depth} $archaic.BWA-MEM
+```
 
-
-For structural variants (pAID-SVs), validation was performed by analyzing mapping coverage profiles and sequence clipping signals from archaic genomes. Archaic WGS data were aligned to T2T-CHM13 using BWA-ALN and BWA-MEM (v0.7.17) for collecting mapping depth and clipping information, respectively. When T2T-CHM13 represents a non-archaic allele, a pAID-SV was defined as HC if the mapping depth was less than 50% of the whole-genome average or if clipping signals were observed. Due to the low coverage of the Vindija and Chagyrskaya genomes, only the Altai Neanderthal was utilized for depth-based assessments. When T2T-CHM13 represents an archaic allele, a pAID-SV was classified as HC if the mapping depth exceeded 50% of the whole-genome average or if the count of clipping reads were less than half of the whole-genome depth.
-
-
+### Merging tables
+Finally, merge `BWA-ALN` and `BWA-MEM` tables; one variant was considered as HC if any strategy found the variant was HC. One simple python script is enough.
