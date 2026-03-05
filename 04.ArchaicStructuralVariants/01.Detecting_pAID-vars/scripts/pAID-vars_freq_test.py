@@ -6,16 +6,16 @@ import numpy as np
 import re
 
 if len(sys.argv) != 4:
-    print(f"Usage: python {sys.argv[0]} input.detail gene input.INV.tsv")
+    print(f"Usage: python {sys.argv[0]} input.detail chunk input.INV.tsv")
     sys.exit(1)
 
 
 input_detail = pd.read_csv(sys.argv[1], sep='\t', header=None, names=['chr', 'start', 'end', 'block_id', 'sample'])
-gene = sys.argv[2]
+chunk = sys.argv[2]
 INV_tsv = pd.read_csv(sys.argv[3], sep='\t', header=0)
 
 print('chrom\tpos\tblock_id\tchi_square_pvalue\tfisher_pvalue\tintrogressed_0\tintrogressed_1\tintrogressed_missing\tnon_introgressed_0\tnon_introgressed_1\tnon_introgressed_missing\tSVTYPE\tSVLEN\tREF\tALT')
-with pysam.VariantFile(f'{gene}.vcf.gz') as vcf:
+with pysam.VariantFile(f'{chunk}.vcf.gz') as vcf:
     for block_id, group in input_detail.groupby('block_id'):
         if len(group['sample']) < 10:
             continue
@@ -112,3 +112,4 @@ with pysam.VariantFile(f'{gene}.vcf.gz') as vcf:
                     
                     fisher_p = stats.fisher_exact([[introgressed['0'], introgressed['1']], [non_introgressed['0'], non_introgressed['1']]]).pvalue
                 print(f'{row["CHR"]}\t{row["START"]}\t{block_id}\t{chi_p}\t{fisher_p}\t{introgressed["0"]}\t{introgressed["1"]}\t{introgressed["missing"]}\t{non_introgressed["0"]}\t{non_introgressed["1"]}\t{non_introgressed["missing"]}\tINV\t{row["LENGTH"]}\t""\t""')
+
