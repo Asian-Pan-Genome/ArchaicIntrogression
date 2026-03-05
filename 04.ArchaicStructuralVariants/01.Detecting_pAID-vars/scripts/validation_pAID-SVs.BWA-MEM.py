@@ -91,9 +91,9 @@ def process_sv_row(row, raw_bam, one_end_window_size, mean_depth_global=None):
         
         depth_ratio = mean_depth_region / mean_depth if mean_depth != 0 else 0
         if ref_is_intro == False:
-            status = "Confirmed" if depth_ratio < 0.5 or (clipping_counts_region is not None and clipping_counts_region > 0) else "NotConfirmed"
+            status = "High-confidence" if depth_ratio < 0.5 or (clipping_counts_region is not None and clipping_counts_region > 0) else "Low-confidence"
         else:
-            status = "Confirmed" if depth_ratio >= 0.5 or (clipping_counts_region is not None and clipping_counts_region / mean_depth < 0.5) else "NotConfirmed"
+            status = "High-confidence" if depth_ratio >= 0.5 or (clipping_counts_region is not None and clipping_counts_region / mean_depth < 0.5) else "Low-confidence"
         # 4. 返回结果字典
         return {
             'chrom': chrom,
@@ -168,7 +168,7 @@ def main():
     
     print("Writing results to output file...")
     output_df = pd.DataFrame(output_data)
-    output_df.to_csv(f'{output_prefix}.sv.confirmed.tsv', sep="\t", index=False, header=True)
+    output_df.to_csv(f'{output_prefix}.sv.High-confidence.tsv', sep="\t", index=False, header=True)
     print("Done!")
 
 if __name__ == "__main__":
