@@ -10,6 +10,8 @@ Before running the pipeline, you should make sure these software/packages are in
 - pandas
 - numpy
 - scipy
+- BWA
+- samtools
 - 
 
 
@@ -65,16 +67,25 @@ Then, you could concat all tables into archaic-level `$archaic.freq_test.tsv`.
 
 
 # Genotyping pAID-vars in Neanderthal and Denisovan genomes
-Here we defined the pAID-vars present in at least one Neanderthal or Denisovan genomes were highly-confident (HC). For small variants (pAID-SMVs, including SNVs and InDels), we could map archaic reads to the reference genome and use GATK to call variants, while for SVs, validation was performed by analyzing mapping coverage profiles and sequence clipping signals.
+Here we defined the pAID-vars present in at least one Neanderthal or Denisovan genomes were highly-confident (HC). For small variants (pAID-SMVs, including SNVs and InDels), we could map archaic reads to the reference genome and use GATK to call variants, while for SVs, which are too difficult to accuartely calling, validation was performed by analyzing mapping coverage profiles and sequence clipping signals.
 
-## pAID-SMVs
-### Archaic reads mapping and variants calling
+## Archaic reads mapping and variants calling
+`BWA-ALN`
 @mingyu
 
-### Classifying pAID-SMVs based on the allele frequency
+This step would generate file `$archaic.vcf.gz` for downstream analysis.
+
+## Validation for pAID-SNVs
+```
+python scripts/validation_pAID-SNVs.py $archaic.freq_test.tsv $archaic.vcf.gz > $archaic.snv.confirmed.tsv
+```
+
+## Validation for pAID-InDels
+For the same indel variants, different callers and methods would generate inconsistent representations (similar to SVs). Here we useed `truvari bench` for comparision.
+### Classifying pAID-InDels based on the allele frequency
 Since the reference genome may represent either a modern or an archaic allele at specific loci, we should employ different validation strategies. Therefore, here we classify them based on the allele frequency present in both introgressed and non-introgressed haplotypes, with the results from the script `pAID-vars_freq_test.py`.
 ```
-python scripts/classify_pAID-SMVs.py $archaic.freq_test.tsv $archaic.freq_test.tsv.A.small_ins.vcf $archaic.freq_test.tsv.A.small_del.vcf $archaic.freq_test.tsv.B.small_ins.vcf $archaic.freq_test.tsv.B.small_del.vcf
+python scripts/classify_pAID-InDels.py $archaic.freq_test.tsv $archaic.freq_test.tsv.A.small_ins.vcf $archaic.freq_test.tsv.A.small_del.vcf $archaic.freq_test.tsv.B.small_ins.vcf $archaic.freq_test.tsv.B.small_del.vcf
 ```
 
 ### Comparing variant alleles using `truvari bench`
@@ -85,7 +96,7 @@ chr1    12567   chr1_12567_C_A  C       A       415     .       AF=0.5;AQ=415;AN
 chr1    23463   chr1_23463_T_C  T       C       109     .       AF=0.333333;AQ=109;AN=4;AC=2    GT:DP:AD:GQ:PL:RNC      1/1:10:0,10:28:415,30,0:..
 chr1    52084   chr1_52084_A_G  A       G       18      .       AF=0.125;AQ=18;AN=6;AC=1        GT:DP:AD:GQ:PL:RNC      1/1:10:0,10:28:415,30,0:..
 ```
-For class B, where the reference represents an archaic allele, we construct `$archaic.hom_alt.vcf.gz`, only extracting variants with homozygous alternative genotypes (“1/1”) called from at least one archaic genome. You could easily create one using `bcftools`:
+For class B, where the reference represents an archaic allele, we construct `$archaic.hom_alt.vcf.gz`, only extracting variants with homozygous alternative genotypes (`1/1`) called from at least one archaic genome. You could easily create one using `bcftools`:
 ```
 #CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  Nean-Altai
 chr1    12567   chr1_12567_C_A  C       A       415     .       AF=0.5;AQ=415;AN=6;AC=2 GT:DP:AD:GQ:PL:RNC      1/1:10:0,10:28:415,30,0:..
@@ -93,33 +104,40 @@ chr1    23463   chr1_23463_T_C  T       C       109     .       AF=0.333333;AQ=1
 chr1    52362   chr1_52362_A_T  A       T       295     .       AF=0.333333;AQ=295;AN=4;AC=2    GT:DP:AD:GQ:PL:RNC      1/1:10:0,10:28:415,30,0:..
 ```
 
-Then, truvari was used for comparing the identified pAID-SMVs and variants called based on archaic reads.
+Then, truvari was used for comparing the identified pAID-InDels and variants called based on archaic reads.
 ```
 for i in ins del; do
     rm -rf $archaic.freq_test.tsv.A.small_${i}/
-    truvari bench -b $archaic.fix_gt.vcf.gz -c $archaic.freq_test.tsv.A.small_${i}.vcf.gz -o $archaic.freq_test.tsv.A.small_${i}/ -f /share/home/zhanglab/user/chenquanyu/rawdata/CHM13/ref/CHM13v2.fasta -r 250 -p 0.5 -P 0.5 -t --pick multi -d -s 1 -S 1
-    truvari refine -t 16 -f /share/home/zhanglab/user/chenquanyu/rawdata/CHM13/ref/CHM13v2.fasta $archaic.freq_test.tsv.A.small_${i}/
+    truvari bench -b $archaic.fix_gt.vcf.gz -c $archaic.freq_test.tsv.A.small_${i}.vcf.gz -o $archaic.freq_test.tsv.A.small_${i}/ -f $REF -r 250 -p 0.5 -P 0.5 -t --pick multi -d -s 1 -S 1
+    truvari refine -t 16 -f $REF $archaic.freq_test.tsv.A.small_${i}/
 
     rm -rf $archaic.freq_test.tsv.B.small_${i}/
-    truvari bench -b $archaic.hom_alt.vcf.gz -c $archaic.freq_test.tsv.B.small_${i}.vcf.gz -o $archaic.freq_test.tsv.B.small_${i}/ -f /share/home/zhanglab/user/chenquanyu/rawdata/CHM13/ref/CHM13v2.fasta -r 250 -p 0.5 -P 0.5 -t --pick multi -d -s 1 -S 1
-    truvari refine -t 16 -f /share/home/zhanglab/user/chenquanyu/rawdata/CHM13/ref/CHM13v2.fasta $archaic.freq_test.tsv.B.small_${i}/
+    truvari bench -b $archaic.hom_alt.vcf.gz -c $archaic.freq_test.tsv.B.small_${i}.vcf.gz -o $archaic.freq_test.tsv.B.small_${i}/ -f $REF -r 250 -p 0.5 -P 0.5 -t --pick multi -d -s 1 -S 1
+    truvari refine -t 16 -f $REF $archaic.freq_test.tsv.B.small_${i}/
 done
 ```
 
 ### Validation
+```
+python scripts/validation_pAID-InDels.py $archaic.freq_test.tsv $archaic.freq_test.tsv.A.small_ins/refine.comp.vcf.gz $archaic.freq_test.tsv.A.small_del/refine.comp.vcf.gz $archaic.freq_test.tsv.B.small_ins/refine.comp.vcf.gz $archaic.freq_test.tsv.B.small_del/refine.comp.vcf.gz $archaic.indel.confirmed.tsv
+```
 
-
-
-
-## pAID-SVs
+## Validation for pAID-SVs
 ### Archaic reads mapping
+While `BWA-ALN` could not generate clipping signals which are important for SVs identification, we additionally utilized `BWA-MEM` for archiaic reads mapping. 
 @mingyu
 
 ### Validation
+First, collect mapping depth information from `$archaic.BWA-ALN.bam`. Before validation, please run `samtools depth` to get the whole-genome avarge depth `${archaic.BWA-ALN.depth}` for archaic genome.
 
-Since the T2T-CHM13 reference may represent either a modern or an archaic allele at specific loci, we employed different validation strategies. When T2T-CHM13 represents a non-archaic allele, genotypes were initially fixed to “1/1” for all variant records, and then compared to the pAID-SMVs utilizing truvari v5.3.0 (English et al., 2022, Genome Biology) with the option “-r 250 -p 0.5 -P 0.5 -t --pick multi -d -s 1 -S 1”, considering potential inconsistent representations of the same indel variants. Those pAID-SMVs tagged as “TP” (true positive) in the output were designated as high-confidence (HC). 
-When T2T-CHM13 represents an archaic allele, such pAID-SMV theoretically should not appear in variant calling results if fixed in archaic hominins. However, definitive identification remains challenging due to ancestral polymorphisms and potential calling errors arising from limited availability of high-depth archaic WGS data. To maintain stringency, we only extracted variants with homozygous alternative genotypes (“1/1”) called from at least one archaic genome, and compared them to pAID-SMVs.
+Then, validate pAID-SVs using only depth profile. 
+```
+python scripts/validation_pAID-SVs.BWA-ALN.py $archaic.freq_test.tsv $archaic.BWA-ALN.bam 500000 32 ${archaic.BWA-ALN.depth} $archaic.BWA-ALN # please specify your window size, here is 500Kb
+```
 
 
+
+
+For structural variants (pAID-SVs), validation was performed by analyzing mapping coverage profiles and sequence clipping signals from archaic genomes. Archaic WGS data were aligned to T2T-CHM13 using BWA-ALN and BWA-MEM (v0.7.17) for collecting mapping depth and clipping information, respectively. When T2T-CHM13 represents a non-archaic allele, a pAID-SV was defined as HC if the mapping depth was less than 50% of the whole-genome average or if clipping signals were observed. Due to the low coverage of the Vindija and Chagyrskaya genomes, only the Altai Neanderthal was utilized for depth-based assessments. When T2T-CHM13 represents an archaic allele, a pAID-SV was classified as HC if the mapping depth exceeded 50% of the whole-genome average or if the count of clipping reads were less than half of the whole-genome depth.
 
 
