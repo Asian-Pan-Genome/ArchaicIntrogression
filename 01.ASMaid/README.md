@@ -18,5 +18,9 @@ This module is dedicated to generating simulation data, validating the performan
 - **Statistical Evaluation**: Robust calculation of Precision, Recall, F1-score, and False Positive Rate (FPR) by comparing inferred tracts with the simulation ground truth.
 
 ## 03. CN-based case analysis (_MGAM_ gene)
+This module focuses on the locus-specific analysis of the **MGAM gene**, a key candidate region showing significant copy number variations (CNV) and archaic introgression. We integrate depth profiling, protein domain annotation, and assembly-based synteny to characterize its evolutionary history.
 
-## Key Tools & Versions
+### Key Components:
+- **Copy Number Profiling**: Normalizing sequencing depth into bins across the introgression tract to visualize CNV landscapes (as shown in Figure 1d).
+- **Structural Integrity Assessment**: Detecting assembly gaps (N-bases) and annotating protein domains by `hmmscan` to evaluate the functional impact of structural variants.
+- **Synteny & Visualization**: Comparing assembly sequences via `minimap2` and visualizing structural rearrangements with `SVbyEye`.
