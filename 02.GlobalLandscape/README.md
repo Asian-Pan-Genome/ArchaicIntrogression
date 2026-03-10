@@ -52,8 +52,8 @@ python 01.merge_segment_into_chunk.py <bed_list_file> <probability_filter> <out_
   
 ### Step 2: Removing ILS Segments
 To differentiate archaic introgression from ILS, we apply rigorous filtering based on African sample distribution. A chunk is removed due to ILS if:
-+ **African Ancestry Predominance:** The proportion of African introgressed individuals among all carriers of the chunk is $\ge 60\%$
-+ **Localized LWK Enrichment:** $\ge 3$ individuals in the African LWK population (Luhya in Webuye, Kenya) carry the chunk, and the cumulative length of the introgressed segment within these individuals exceeds $50\%$ of the total chunk length.
++ **African Ancestry Predominance:** The proportion of African introgressed individuals among all carriers of the chunk is ≥ 60%.
++ **Localized LWK Enrichment:** ≥ 3 individuals in the African LWK population (Luhya in Webuye, Kenya) carry the chunk, and the cumulative length of the introgressed segment within these individuals exceeds 50% of the total chunk length.
 
 ```bash
 python 02.remove_ILS_segment.py <merged_bed> <merged_detail> <AFR_sample_list> <LWK_sample_list> <output_prefix>
@@ -66,11 +66,11 @@ python 02.remove_ILS_segment.py <merged_bed> <merged_detail> <AFR_sample_list> <
 For cumulative chunk counts, we utilized the final 610-sample aggregate as a reference set, determining the proportion of the total `“introgressed pangenome”` captured with each incremental addition.
 
 + **Frequency Categories:**
-  + Singleton: $n = 1$
-  + Rare: $f < 1\%$
-  + Low-frequency: $1\% \le f < 5\%$
-  + Common: $5\% \le f < 40\%$
-  + High-frequency: $f \ge 40\%$
+  + `Singleton`: introgressed sample number == 1
+  + `Rare`: introgressed sample frequency (f) < 1%
+  + `Low-frequency`: 1% ≤ f < 5%
+  + `Common`: 5% ≤ f < 40%
+  + `High-frequency`: f ≥ 40%
 
 ```bash
 python 03.cumulative_stat_for_chunk_number.py <sample_order_file> <merged_detail> <output_file>
