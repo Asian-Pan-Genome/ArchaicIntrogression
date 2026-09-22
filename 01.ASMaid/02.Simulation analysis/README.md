@@ -45,7 +45,7 @@ python 01.extract_introgression_ground_truth.py
 # output: xxx.old.intro for coalescing-based ground truth, xxx.new.intro for migrating-based ground truth
 ```
 <div align=center>
-<img src="Sim_Result/model.ground_truth.png" width=80%>
+<img src="model.ground_truth.png" width=80%>
 </div>
 
 The migration-based ground truth identifies genomic intervals that experienced migration during the predefined introgression epoch. This definition does not require an introgressed lineage to coalesce with the sampled archaic genome and therefore also captures introgressed lineages that coalesced before the divergence of the sampled archaic population.
@@ -62,7 +62,7 @@ python 01.inject_continuous_cnv.py
 ```
 
 <div align=center>
-<img src="Sim_Result/model.inject_cnv.png" width=80%>
+<img src="model.inject_cnv.png" width=80%>
 </div>
 
 The script introduces continuous copy-number/read-depth variation into selected introgressed and non-introgressed regions. ASMaid performance is then compared between genotype-only information and the combination of genotype and copy-number/read-depth information using the same ground-truth tracts.
