@@ -1,0 +1,33 @@
+// TP1-FX: one Denisovan pulse into EAS; no Neanderthal population
+4 samples to simulate :
+// Demes: 0 AFR, 1 EAS, 2 DENI ghost donor, 3 DENS Altai Denisovan
+86954 sfspool 0
+189407 sfspool 1
+5069 sfspool -1
+5069 sfspool 2
+// Haploid sample sizes and sampling ages; placeholders must match the observed SFS
+20 0
+40 0
+0 0
+2 2203
+// Growth rates; negative fsc rate represents forward-time expansion
+0
+-0.0022539867
+0
+0
+// No continuous migration
+0
+// time, source, sink, migrants, new sink size, new sink growth, migration matrix
+6 historical event
+$T_PULSE1$ 1 2 $ADMIX_TOTAL$ 1 0 0
+1765 1 1 0 1453 0 0 absoluteResize
+2151 1 0 1 1 0 0
+3640 0 0 0 38616 0 0 absoluteResize
+10599 3 2 1 5069 0 0 absoluteResize
+20395 2 0 1 38616 0 0 absoluteResize
+// One expected multidimensional SFS locus
+1 0
+// Per chromosome: number of contiguous linkage blocks
+1
+// Per block: data type, number of loci, recombination and mutation rates
+FREQ 1 0 1.25e-8 OUTEXP

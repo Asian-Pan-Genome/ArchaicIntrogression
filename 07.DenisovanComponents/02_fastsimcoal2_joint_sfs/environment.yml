@@ -1,0 +1,9 @@
+name: denisovan-joint-sfs
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.10
+  - msprime>=1.3
+  - demes>=0.2
+  - demesdraw>=0.4
+  - matplotlib>=3.7

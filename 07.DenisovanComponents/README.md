@@ -1,10 +1,10 @@
-# Three Denisovan introgression pulses in East Eurasian genomes
+# Three Denisovan introgression components in East Eurasian genomes
 
 
 
 # Gaussian Mixture Modeling (GMM) pipeline
 
-This document describes the R-based workflow for inferring the optimal number of Denisovan introgression pulses per haploid genome using Gaussian mixture modeling (GMM) on match rates (MR) of introgressed segments. The pipeline implements likelihood‑ratio tests (LRT) to compare nested models (k = 1, 2, 3 components) and outputs comprehensive diagnostic plots, parameter estimates, and summary tables for downstream interpretation.
+This document describes the R-based workflow for inferring the optimal number of Denisovan introgression components per haploid genome using Gaussian mixture modeling (GMM) on match rates (MR) of introgressed segments. The pipeline implements likelihood‑ratio tests (LRT) to compare nested models (k = 1, 2, 3 components) and outputs comprehensive diagnostic plots, parameter estimates, and summary tables for downstream interpretation.
 
 ---
 
@@ -130,7 +130,7 @@ These merged tables are used to determine the **optimal number of components** p
 
 ---
 
-## Determining the optimal k (number of pulses)
+## Determining the optimal k (number of components)
 
 The optimal model is selected using a **hierarchical likelihood‑ratio test**:
 

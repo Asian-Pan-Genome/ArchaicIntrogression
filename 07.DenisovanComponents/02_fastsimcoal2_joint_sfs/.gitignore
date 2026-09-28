@@ -1,0 +1,11 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+*.log
+*.out
+*.err
+core
+core.*
+work/
+results/run_*/
+results/rep_*/

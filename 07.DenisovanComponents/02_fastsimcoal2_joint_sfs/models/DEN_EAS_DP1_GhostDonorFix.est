@@ -1,0 +1,6 @@
+[PARAMETERS]
+//#isInt? #name   #distribution #min    #max    #output #constraint
+1 $T_PULSE1$    unif          700      1760   output bounded
+0 $ADMIX_TOTAL$ logunif       0.0001   0.03   output bounded
+
+[COMPLEX PARAMETERS]

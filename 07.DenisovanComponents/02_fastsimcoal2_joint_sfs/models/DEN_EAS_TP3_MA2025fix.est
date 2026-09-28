@@ -1,0 +1,18 @@
+[PARAMETERS]
+//#isInt? #name   #distribution #min    #max    #output #constraint
+1 $T_PULSE1$        unif          700         1600   output bounded
+1 $T_PULSE2$        unif          $T_PULSE1$  1700   output paramInRange
+1 $T_PULSE3$        unif          $T_PULSE2$  1760   output paramInRange
+0 $ADMIX_TOTAL$     logunif       0.0001      0.03   output bounded
+0 $ADMIX_FRACTION1$ unif          0.05        0.90   output bounded
+0 $ADMIX_FRACTION2$ unif          0.05        0.90   output bounded
+
+[COMPLEX PARAMETERS]
+0 $ADMIX1$ = $ADMIX_TOTAL$ * $ADMIX_FRACTION1$ output
+0 $ADMIX_REMAINDER$ = $ADMIX_TOTAL$ - $ADMIX1$ hide
+0 $ADMIX2$ = $ADMIX_REMAINDER$ * $ADMIX_FRACTION2$ output
+0 $ADMIX3$ = $ADMIX_REMAINDER$ - $ADMIX2$ output
+0 $EAS_REMAIN1$ = 1 - $ADMIX1$ hide
+0 $EAS_REMAIN2$ = $EAS_REMAIN1$ - $ADMIX2$ hide
+0 $ADMIX_EVENT2$ = $ADMIX2$ / $EAS_REMAIN1$ hide
+0 $ADMIX_EVENT3$ = $ADMIX3$ / $EAS_REMAIN2$ hide
